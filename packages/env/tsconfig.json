@@ -1,0 +1,3 @@
+{
+  "extends": "@colorstack-gt/config/tsconfig.base.json"
+}
