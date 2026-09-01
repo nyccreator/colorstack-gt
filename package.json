@@ -34,7 +34,8 @@
     "dev:setup": "turbo run dev:setup -F @colorstack-gt/backend --",
     "deploy": "turbo run deploy -F @colorstack-gt/infra --",
     "destroy": "turbo run destroy -F @colorstack-gt/infra --",
-    "check": "oxlint && oxfmt --write"
+    "check": "oxlint && oxfmt --write",
+    "check:ci": "oxlint && oxfmt --check"
   },
   "dependencies": {
     "@colorstack-gt/env": "workspace:*",
