@@ -4,6 +4,15 @@ import { internalAction } from "./_generated/server";
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
+function isDevelopment(): boolean {
+  try {
+    const { hostname } = new URL(process.env.SITE_URL ?? "");
+    return hostname === "localhost" || hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+}
+
 const body = (url: string) =>
   [
     "Click the link below to sign in to ColorStack at Georgia Tech.",
@@ -21,6 +30,11 @@ export const sendMagicLink = internalAction({
     const from = process.env.EMAIL_FROM;
 
     if (!apiKey || !from) {
+      if (!isDevelopment()) {
+        throw new Error(
+          `No mail provider configured on ${process.env.SITE_URL}. Set RESEND_API_KEY and EMAIL_FROM on this deployment; sign-in links are never written to its logs.`,
+        );
+      }
       console.info(`No mail provider configured. Magic link for ${email}: ${url}`);
       return;
     }

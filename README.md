@@ -40,6 +40,10 @@ Sign in emails need a [Resend](https://resend.com) key. Without one you don't ne
 anything up. The sign in link is printed to the Convex console so you can click through
 it locally.
 
+That only happens when `SITE_URL` points at localhost. On any other deployment a missing
+`RESEND_API_KEY` or `EMAIL_FROM` fails the send instead, because a printed sign in link is
+a working credential and does not belong in a deployment's logs.
+
 | Variable               | Where           | What it's for                              |
 | ---------------------- | --------------- | ------------------------------------------ |
 | `VITE_CONVEX_URL`      | `apps/web/.env` | Your Convex deployment                     |
