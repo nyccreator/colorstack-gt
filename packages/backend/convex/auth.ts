@@ -45,12 +45,17 @@ function createAuth(ctx: GenericCtx<DataModel>) {
       magicLink({
         expiresIn: MAGIC_LINK_EXPIRY_SECONDS,
         rateLimit: MAGIC_LINK_RATE_LIMIT,
-        sendMagicLink: async ({ email, url }) => {
+        sendMagicLink: async ({ email, url, token }) => {
           if (!isGeorgiaTechEmail(email)) return;
+
+          const callbackURL = new URL(url).searchParams.get("callbackURL") ?? "/";
+          const confirm = new URL("/verify", siteUrl);
+          confirm.searchParams.set("token", token);
+          confirm.searchParams.set("callbackURL", callbackURL);
 
           await requireRunMutationCtx(ctx).scheduler.runAfter(0, internal.email.sendMagicLink, {
             email,
-            url,
+            url: confirm.toString(),
           });
         },
       }),
