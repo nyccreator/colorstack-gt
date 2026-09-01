@@ -109,7 +109,7 @@ export const COMMUNITIES = [
     key: "engageJoined",
     label: "Have you joined ColorStack on Engage?",
     linkLabel: "Join on Engage",
-    href: "https://gatech.campuslabs.com/engage/",
+    href: "https://gatech.campuslabs.com/engage/organization/colorstack-at-gt",
   },
   {
     key: "instagramFollowed",
@@ -121,7 +121,7 @@ export const COMMUNITIES = [
     key: "whatsappJoined",
     label: "Have you joined our WhatsApp community?",
     linkLabel: "Join on WhatsApp",
-    href: "https://chat.whatsapp.com/GeflwhJgwTq7GOzvHVPv7p",
+    href: "https://chat.whatsapp.com/GefIwhJgwTq7GOzvHVPv7p",
   },
 ] as const;
 
