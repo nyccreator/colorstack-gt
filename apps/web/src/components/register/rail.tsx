@@ -41,9 +41,9 @@ export function Rail({
   const askable = sum(progress, (section) => section.total);
 
   return (
-    <div className="relative flex flex-col border-gold/22 px-6 py-5 md:sticky md:top-0 md:h-dvh md:w-rail md:self-start md:border-r md:px-8 md:py-6">
+    <div className="relative flex flex-col border-gold/22 px-6 py-5 md:sticky md:top-0 md:h-dvh md:w-64 md:self-start md:border-r md:px-6 md:py-6 lg:w-rail lg:px-8">
       <div className="mb-8 md:mb-11">
-        <Lockup />
+        <Lockup compact />
       </div>
 
       <h1 className="type-display text-page">
@@ -145,6 +145,9 @@ export function Rail({
           />
         </div>
         <span className="type-label text-neutral-muted-navy">
+          <span className="md:hidden">
+            Chapter {current} of {CHAPTERS.length} &#183;{" "}
+          </span>
           {answered} of {askable} answered
         </span>
       </div>

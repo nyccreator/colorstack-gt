@@ -120,7 +120,13 @@ export function You({ form, errors, set }: ChapterProps) {
               onChange={(e) => set("classification", e.target.value)}
             />
           </Field>
-          <FieldGroup id="graduation" label="Expected graduation" required error={graduation}>
+          <FieldGroup
+            id="graduation"
+            label="Expected graduation"
+            required
+            error={graduation}
+            className="sm:col-span-2 lg:col-span-1"
+          >
             <div className="grid grid-cols-2 gap-x-3">
               <Select
                 id="grad-season"
@@ -316,7 +322,7 @@ export function YourInterests({ form, set }: ChapterProps) {
         </FieldGroup>
 
         <FieldGroup id="socialEvents" label="Social events you would come to" className="mt-8">
-          <div className="grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3 lg:grid-cols-4">
             {SOCIAL_EVENTS.map((label) => (
               <Choice
                 key={label}

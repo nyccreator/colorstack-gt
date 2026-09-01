@@ -186,7 +186,7 @@ export function RegisterForm({ email }: { email?: string }) {
         noValidate
         className="relative flex min-h-dvh flex-col bg-diploma text-neutral-ink-navy"
       >
-        <div className="flex-1 px-6 pt-10 pb-12 sm:px-10 md:px-14 md:pt-11">
+        <div className="flex-1 px-6 pt-10 pb-40 sm:px-10 md:px-14 md:pt-11 lg:pb-28">
           <h2 ref={heading} tabIndex={-1} className="type-display text-step outline-none">
             {lead}
             <span className="text-gold-dark italic">{accent}</span>
