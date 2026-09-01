@@ -250,6 +250,8 @@
   html {
     scroll-behavior: smooth;
     font-optical-sizing: auto;
+    /* Keeps a focused field from landing under the registration footer. */
+    scroll-padding-bottom: 140px;
   }
 
   body {

@@ -177,16 +177,16 @@ export function RegisterForm({ email }: { email?: string }) {
   const progress = sectionProgress(form, errors);
 
   return (
-    <div className="relative min-h-dvh md:grid md:grid-cols-[auto_1fr] md:items-start">
+    <div className="relative flex min-h-dvh flex-col md:grid md:grid-cols-[auto_1fr] md:items-start">
       <div className="wash-register" />
       <Rail current={chapter} progress={progress} onGo={goTo} />
 
       <form
         onSubmit={onSubmit}
         noValidate
-        className="relative flex min-h-dvh flex-col bg-diploma text-neutral-ink-navy"
+        className="relative flex flex-1 flex-col bg-diploma text-neutral-ink-navy md:min-h-dvh"
       >
-        <div className="flex-1 px-6 pt-10 pb-40 sm:px-10 md:px-14 md:pt-11 lg:pb-28">
+        <div className="flex-1 px-6 pt-10 pb-12 sm:px-10 md:px-14 md:pt-11">
           <h2 ref={heading} tabIndex={-1} className="type-display text-step outline-none">
             {lead}
             <span className="text-gold-dark italic">{accent}</span>
