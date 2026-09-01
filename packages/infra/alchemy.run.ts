@@ -14,11 +14,14 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
+    const domain = process.env.WEB_DOMAIN;
+
     const webWorker = yield* Cloudflare.Website.Vite("web", {
       rootDir: "../../apps/web",
       compatibility: {
         flags: ["nodejs_compat"],
       },
+      routes: domain ? [{ pattern: `${domain}/*`, zoneName: domain }] : undefined,
       env: {
         VITE_CONVEX_URL: Config.string("VITE_CONVEX_URL"),
         VITE_CONVEX_SITE_URL: Config.string("VITE_CONVEX_SITE_URL"),
