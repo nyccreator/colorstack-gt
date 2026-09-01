@@ -38,6 +38,7 @@ export function RegisterForm({ email }: { email?: string }) {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const heading = useRef<HTMLHeadingElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
   const moved = useRef(false);
   /** The section to land on once the new chapter has rendered. */
   const anchor = useRef<string | null>(null);
@@ -56,6 +57,7 @@ export function RegisterForm({ email }: { email?: string }) {
       return;
     }
     heading.current?.focus();
+    scroller.current?.scrollTo({ top: 0 });
     window.scrollTo({ top: 0 });
   }, [chapter]);
 
@@ -92,7 +94,6 @@ export function RegisterForm({ email }: { email?: string }) {
       return;
     }
 
-    // Going forward from the rail has to clear every chapter it skips over.
     for (let step = chapter; step < next; step++) {
       const found = validateChapter(step, form);
       if (Object.keys(found).length > 0) {
@@ -177,16 +178,19 @@ export function RegisterForm({ email }: { email?: string }) {
   const progress = sectionProgress(form, errors);
 
   return (
-    <div className="relative flex min-h-dvh flex-col md:grid md:grid-cols-[auto_1fr] md:items-start">
+    <div className="relative flex min-h-dvh flex-col md:grid md:h-dvh md:grid-cols-[auto_1fr] md:overflow-hidden">
       <div className="wash-register" />
       <Rail current={chapter} progress={progress} onGo={goTo} />
 
       <form
         onSubmit={onSubmit}
         noValidate
-        className="relative flex flex-1 flex-col bg-diploma text-neutral-ink-navy md:min-h-dvh"
+        className="relative flex flex-1 flex-col bg-diploma text-neutral-ink-navy md:h-dvh md:overflow-hidden"
       >
-        <div className="flex-1 px-6 pt-10 pb-12 sm:px-10 md:px-14 md:pt-11">
+        <div
+          ref={scroller}
+          className="flex-1 px-6 pt-10 pb-12 sm:px-10 md:min-h-0 md:overflow-y-auto md:px-14 md:pt-11"
+        >
           <h2 ref={heading} tabIndex={-1} className="type-display text-step outline-none">
             {lead}
             <span className="text-gold-dark italic">{accent}</span>

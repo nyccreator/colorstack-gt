@@ -41,7 +41,7 @@ export function Rail({
   const askable = sum(progress, (section) => section.total);
 
   return (
-    <div className="relative flex flex-col border-gold/22 px-6 py-5 md:sticky md:top-0 md:h-dvh md:w-64 md:self-start md:border-r md:px-6 md:py-6 lg:w-rail lg:px-8">
+    <div className="relative flex flex-col border-gold/22 px-6 py-5 md:h-dvh md:w-64 md:border-r md:px-6 md:py-6 lg:w-rail lg:px-8">
       <div className="mb-8 md:mb-11">
         <Lockup compact />
       </div>
