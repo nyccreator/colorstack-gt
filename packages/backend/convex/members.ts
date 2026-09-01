@@ -51,7 +51,7 @@ export const start = action({
     }
 
     const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
-    await auth.api.signInMagicLink({ body: { email: gtEmail, callbackURL: "/" }, headers });
+    await auth.api.signInMagicLink({ body: { email: gtEmail, callbackURL: "/portal" }, headers });
     return "link_sent";
   },
 });
@@ -192,7 +192,7 @@ export const register = action({
       body: {
         email: gtEmail,
         name: `${args.firstName} ${args.lastName}`.trim(),
-        callbackURL: "/",
+        callbackURL: "/portal",
       },
       headers,
     });
