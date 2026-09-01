@@ -2,7 +2,7 @@ import { ConvexError, type Infer, v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { action, internalMutation, internalQuery } from "./_generated/server";
+import { action, internalMutation, internalQuery, query } from "./_generated/server";
 import { authComponent, createAuth } from "./auth";
 import { RESUME_SWEEP_BATCH, RESUME_UPLOAD_TTL_MS } from "./lib/config";
 import { isGraduationYearAllowed } from "./lib/graduation";
@@ -53,6 +53,27 @@ export const start = action({
     const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
     await auth.api.signInMagicLink({ body: { email: gtEmail, callbackURL: "/" }, headers });
     return "link_sent";
+  },
+});
+
+export const me = query({
+  args: {},
+  returns: v.union(v.object({ firstName: v.string() }), v.null()),
+  handler: async (ctx) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) return null;
+
+    const member =
+      (await ctx.db
+        .query("members")
+        .withIndex("by_userId", (q) => q.eq("userId", user._id))
+        .unique()) ??
+      (await ctx.db
+        .query("members")
+        .withIndex("by_gtEmail", (q) => q.eq("gtEmail", normalizeEmail(user.email)))
+        .unique());
+
+    return member ? { firstName: member.firstName } : null;
   },
 });
 

@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useRouteContext } from "@tanstack/react-router";
 
 import { Lockup } from "@/components/lockup";
 
@@ -6,6 +6,8 @@ import { EmailCapture } from "./email-capture";
 import { SupporterBand } from "./supporter-band";
 
 export function Hero() {
+  const { isAuthenticated } = useRouteContext({ from: "__root__" });
+
   return (
     <header>
       <div className="relative flex min-h-dvh flex-col overflow-hidden bg-navy text-neutral-ink-cream md:h-dvh md:min-h-180">
@@ -14,9 +16,15 @@ export function Hero() {
 
         <nav className="relative flex flex-wrap items-center justify-between gap-4 px-6 py-5 md:px-9 md:py-6">
           <Lockup />
-          <Link to="/login" className="type-label text-gold">
-            Member log in &#8594;
-          </Link>
+          {isAuthenticated ? (
+            <Link to="/portal" className="type-label text-gold">
+              Member portal &#8594;
+            </Link>
+          ) : (
+            <Link to="/login" className="type-label text-gold">
+              Member log in &#8594;
+            </Link>
+          )}
         </nav>
 
         <div className="relative flex flex-1 flex-col items-center justify-center px-5 py-8 text-center md:px-14">
@@ -39,7 +47,7 @@ export function Hero() {
             rewarding technical careers.
           </p>
 
-          <EmailCapture />
+          {isAuthenticated ? null : <EmailCapture />}
         </div>
 
         <SupporterBand />

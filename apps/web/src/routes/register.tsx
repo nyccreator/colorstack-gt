@@ -1,5 +1,5 @@
 import { isGeorgiaTechEmail } from "@colorstack-gt/backend/convex/lib/identity";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { RegisterForm } from "@/components/register/form";
@@ -11,6 +11,9 @@ const searchSchema = z.object({
 
 export const Route = createFileRoute("/register")({
   validateSearch: searchSchema,
+  beforeLoad: ({ context }) => {
+    if (context.isAuthenticated) throw redirect({ to: "/portal" });
+  },
   component: Register,
 });
 
