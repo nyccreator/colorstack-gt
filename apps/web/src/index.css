@@ -46,6 +46,8 @@
   --color-neutral-border-checkbox: #c9c0a6;
   --color-neutral-placeholder: #857c68;
 
+  --color-error: var(--color-azalea);
+
   /* Type */
   --font-display: "Fraunces Variable", ui-serif, Georgia, serif;
   --font-sans: "Archivo Variable", "Archivo", ui-sans-serif, system-ui, sans-serif;
@@ -203,8 +205,6 @@
     "WONK" 0;
 }
 
-/* Archivo has a real width axis, so metadata gets an expanded cut instead of a
-   separate monospace family. */
 @utility type-label {
   font-family: var(--font-sans);
   font-size: var(--text-label);
@@ -295,6 +295,17 @@
   select:focus {
     border-color: var(--color-gold);
     box-shadow: 0 0 0 3px rgb(179 144 81 / 0.16);
+  }
+
+  input[aria-invalid="true"]:not([type="checkbox"], [type="radio"]),
+  select[aria-invalid="true"] {
+    border-color: var(--color-error);
+  }
+
+  input[aria-invalid="true"]:not([type="checkbox"], [type="radio"]):focus,
+  select[aria-invalid="true"]:focus {
+    border-color: var(--color-error);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-error) 16%, transparent);
   }
 
   ::placeholder {

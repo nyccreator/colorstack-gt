@@ -5,10 +5,7 @@ const PARTNERS = [
   { name: "NVIDIA", src: "/assets/partners/nvidia.svg" },
 ];
 
-/**
- * Enough repeats that half the track still fills the lane on a wide monitor,
- * which is what keeps the loop from running out of logos.
- */
+/** Enough repeats that half the track still fills the lane on a wide monitor. */
 const COPIES = 8;
 
 function PartnerLogo({ name, src, hidden }: { name: string; src: string; hidden?: boolean }) {

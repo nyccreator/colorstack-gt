@@ -41,12 +41,12 @@ function createAuth(ctx: GenericCtx<DataModel>) {
       magicLink({
         expiresIn: MAGIC_LINK_EXPIRY_SECONDS,
         rateLimit: MAGIC_LINK_RATE_LIMIT,
-        sendMagicLink: async ({ email, token }) => {
+        sendMagicLink: async ({ email, url }) => {
           if (!isGeorgiaTechEmail(email)) return;
 
           await requireRunMutationCtx(ctx).scheduler.runAfter(0, internal.email.sendMagicLink, {
             email,
-            url: `${siteUrl}/auth/verify?token=${encodeURIComponent(token)}`,
+            url,
           });
         },
       }),
