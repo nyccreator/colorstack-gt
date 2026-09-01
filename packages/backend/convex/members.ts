@@ -1,4 +1,4 @@
-import { ConvexError, v } from "convex/values";
+import { ConvexError, type Infer, v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -10,6 +10,8 @@ import { isGeorgiaTechEmail, isPhone, normalizeEmail } from "./lib/identity";
 import { demographicAnswers, registrationFields } from "./schema";
 
 const outcome = v.union(v.literal("saved"), v.literal("exists"));
+
+type Outcome = Infer<typeof outcome>;
 
 const submission = {
   ...registrationFields,
@@ -143,7 +145,7 @@ export const sweepUnclaimedResumes = internalMutation({
 export const register = action({
   args: submission,
   returns: outcome,
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<Outcome> => {
     const gtEmail = normalizeEmail(args.gtEmail);
 
     if (!isGeorgiaTechEmail(gtEmail)) {
@@ -159,7 +161,10 @@ export const register = action({
       throw new ConvexError("Choose a graduation year within four years of today.");
     }
 
-    const result = await ctx.runMutation(internal.members.saveSubmission, { ...args, gtEmail });
+    const result: Outcome = await ctx.runMutation(internal.members.saveSubmission, {
+      ...args,
+      gtEmail,
+    });
 
     const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
     await auth.api.signInMagicLink({

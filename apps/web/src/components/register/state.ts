@@ -1,9 +1,13 @@
+import type { api } from "@colorstack-gt/backend/convex/_generated/api";
 import { RESUME_MAX_BYTES } from "@colorstack-gt/backend/convex/lib/config";
 import {
   isGeorgiaTechEmail,
   isPhone,
   normalizeEmail,
 } from "@colorstack-gt/backend/convex/lib/identity";
+import type { FunctionArgs } from "convex/server";
+
+export type Submission = FunctionArgs<typeof api.members.register>;
 
 export type FormState = {
   firstName: string;
@@ -93,7 +97,8 @@ export function toggleValue(current: string[], value: string): string[] {
   return current.includes(value) ? current.filter((item) => item !== value) : [...current, value];
 }
 
-export function toSubmission(form: FormState, resumeUploadToken?: string) {
+/** Shapes the form for the register action. Step validation has already required each choice. */
+export function toSubmission(form: FormState, resumeUploadToken?: string): Submission {
   return {
     firstName: form.firstName.trim(),
     lastName: form.lastName.trim(),
@@ -101,13 +106,13 @@ export function toSubmission(form: FormState, resumeUploadToken?: string) {
     personalEmail: form.personalEmail.trim(),
     pronouns: form.pronouns.trim(),
     phone: form.phone.trim(),
-    classification: form.classification,
-    graduationSeason: form.graduationSeason,
+    classification: form.classification as Submission["classification"],
+    graduationSeason: form.graduationSeason as Submission["graduationSeason"],
     graduationYear: Number(form.graduationYear),
-    gpa: form.gpa,
+    gpa: form.gpa as Submission["gpa"],
     major: form.major.trim(),
     minor: optional(form.minor),
-    affiliations: form.affiliations,
+    affiliations: form.affiliations as Submission["affiliations"],
     linkedin: normalizeUrl(form.linkedin),
     github: normalizeUrl(form.github),
     resumeUploadToken,
@@ -122,7 +127,7 @@ export function toSubmission(form: FormState, resumeUploadToken?: string) {
       gender: form.gender,
       firstGeneration: form.firstGeneration,
       lowIncome: form.lowIncome,
-    },
+    } as Submission["demographics"],
   };
 }
 

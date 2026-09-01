@@ -12,23 +12,27 @@ import { isGeorgiaTechEmail, normalizeEmail } from "./lib/identity";
 
 const siteUrl = process.env.SITE_URL!;
 
-export const authComponent = createClient<DataModel>(components.betterAuth, {
-  authFunctions: internal.auth as AuthFunctions,
-  triggers: {
-    user: {
-      onCreate: async (ctx, user) => {
-        const member = await ctx.db
-          .query("members")
-          .withIndex("by_gtEmail", (q) => q.eq("gtEmail", normalizeEmail(user.email)))
-          .unique();
+// The annotation breaks a type cycle between this value and the generated api.
+export const authComponent: ReturnType<typeof createClient<DataModel>> = createClient<DataModel>(
+  components.betterAuth,
+  {
+    authFunctions: internal.auth as AuthFunctions,
+    triggers: {
+      user: {
+        onCreate: async (ctx, user) => {
+          const member = await ctx.db
+            .query("members")
+            .withIndex("by_gtEmail", (q) => q.eq("gtEmail", normalizeEmail(user.email)))
+            .unique();
 
-        if (!member) return;
+          if (!member) return;
 
-        await ctx.db.patch(member._id, { userId: user._id, verifiedAt: Date.now() });
+          await ctx.db.patch(member._id, { userId: user._id, verifiedAt: Date.now() });
+        },
       },
     },
   },
-});
+);
 
 export const { onCreate, onUpdate, onDelete } = authComponent.triggersApi();
 

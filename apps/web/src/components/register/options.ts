@@ -1,3 +1,7 @@
+import type { Submission } from "./state";
+
+type Options<T extends string> = readonly { value: T; label: string }[];
+
 export const CLASSIFICATIONS = [
   { value: "first_year", label: "First-year" },
   { value: "second_year", label: "Second-year" },
@@ -5,14 +9,14 @@ export const CLASSIFICATIONS = [
   { value: "fourth_year", label: "Fourth-year" },
   { value: "fifth_year_plus", label: "Fifth-year+" },
   { value: "graduate", label: "Master's / PhD" },
-] as const;
+] as const satisfies Options<Submission["classification"]>;
 
 export const SEASONS = [
   { value: "spring", label: "Spring" },
   { value: "summer", label: "Summer" },
   { value: "fall", label: "Fall" },
   { value: "winter", label: "Winter" },
-] as const;
+] as const satisfies Options<Submission["graduationSeason"]>;
 
 export const AFFILIATIONS = [
   { value: "code_2040", label: "Code 2040" },
@@ -20,7 +24,7 @@ export const AFFILIATIONS = [
   { value: "shpe", label: "Society of Hispanic Professional Engineers (SHPE)" },
   { value: "mlt", label: "Management Leadership for Tomorrow (MLT)" },
   { value: "codepath", label: "CodePath" },
-] as const;
+] as const satisfies Options<Submission["affiliations"][number]>;
 
 export const GPA_RANGES = [
   { value: "below_2_5", label: "0.0 - 2.4" },
@@ -29,7 +33,7 @@ export const GPA_RANGES = [
   { value: "3_3_to_3_6", label: "3.3 - 3.6" },
   { value: "3_7_to_4_0", label: "3.7 - 4.0" },
   { value: "not_applicable", label: "N/A" },
-] as const;
+] as const satisfies Options<Submission["gpa"]>;
 
 export const INTERESTS = [
   "Recruiting opportunities",
@@ -66,7 +70,7 @@ export const RACE_ETHNICITIES = [
   { value: "white", label: "White (Non-Hispanic/Latinx)" },
   { value: "other", label: "Other" },
   { value: "prefer_not_to_say", label: "Prefer not to say" },
-] as const;
+] as const satisfies Options<Submission["demographics"]["raceEthnicity"]>;
 
 export const GENDERS = [
   { value: "cis_man", label: "Cisgender Man" },
@@ -76,7 +80,7 @@ export const GENDERS = [
   { value: "nonbinary", label: "Gender Non-Conforming / Non-Binary" },
   { value: "other", label: "Other" },
   { value: "prefer_not_to_say", label: "Prefer not to say" },
-] as const;
+] as const satisfies Options<Submission["demographics"]["gender"]>;
 
 export const YES_NO = [
   { value: "yes", label: "Yes" },
@@ -87,7 +91,7 @@ export const YES_NO_PRIVATE = [
   { value: "yes", label: "Yes" },
   { value: "no", label: "No" },
   { value: "prefer_not_to_say", label: "Prefer not to say" },
-] as const;
+] as const satisfies Options<Submission["demographics"]["firstGeneration"]>;
 
 export const COMMUNITIES = [
   {
