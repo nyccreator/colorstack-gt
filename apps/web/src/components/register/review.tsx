@@ -12,8 +12,18 @@ import {
 } from "./options";
 import type { FormState } from "./state";
 
+const EMPTY = "—";
+
 function labelOf(options: readonly { value: string; label: string }[], value: string) {
-  return options.find((option) => option.value === value)?.label ?? value;
+  return value ? (options.find((option) => option.value === value)?.label ?? value) : EMPTY;
+}
+
+function or(value: string) {
+  return value.trim() ? value : EMPTY;
+}
+
+function list(values: readonly string[]) {
+  return values.length > 0 ? values.join(", ") : "None selected";
 }
 
 function Group({
@@ -28,7 +38,7 @@ function Group({
   return (
     <section className="border-t border-neutral-rule-cream py-5">
       <div className="mb-3 flex items-baseline justify-between gap-4">
-        <h3 className="type-label text-neutral-label-cream">{title}</h3>
+        <h4 className="type-label text-neutral-label-cream">{title}</h4>
         <button
           type="button"
           onClick={onEdit}
@@ -37,7 +47,7 @@ function Group({
           Edit
         </button>
       </div>
-      <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-[auto_1fr]">{children}</dl>
+      <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-[12rem_1fr]">{children}</dl>
     </section>
   );
 }
@@ -51,71 +61,61 @@ function Row({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
-export function Review({ form, onEdit }: { form: FormState; onEdit: (step: number) => void }) {
-  const yesNo = (value: string) => (value === "yes" ? "Yes" : "No");
+export function Review({
+  form,
+  onEdit,
+}: {
+  form: FormState;
+  onEdit: (chapter: number, anchor: string) => void;
+}) {
+  const yesNo = (value: string) => (value === "yes" ? "Yes" : value === "no" ? "No" : EMPTY);
+  const graduation =
+    form.graduationSeason || form.graduationYear
+      ? `${labelOf(SEASONS, form.graduationSeason)} ${form.graduationYear}`.trim()
+      : EMPTY;
 
   return (
-    <div className="max-w-[68ch]">
-      <div className="rounded-content border border-gold/45 bg-neutral-cream-raised px-5 py-4">
+    <div className="mt-5 max-w-[82ch]">
+      <div className="mb-6 rounded-content border border-gold/45 bg-neutral-cream-raised px-5 py-4">
         <p className="text-detail text-neutral-body-cream">We will send your sign-in link to</p>
         <p className="mt-1 text-subhead font-semibold break-all text-neutral-ink-navy">
           {form.gtEmail || "your Georgia Tech email"}
         </p>
-        <p className="mt-2 text-note leading-note text-neutral-body-cream">
-          This is the only way into your account, so make sure it is right.
-        </p>
       </div>
 
-      <Group title="About you" onEdit={() => onEdit(1)}>
-        <Row label="Name" value={`${form.firstName} ${form.lastName} (${form.pronouns})`} />
-        <Row label="Personal email" value={form.personalEmail} />
-        <Row label="Phone" value={form.phone} />
-      </Group>
-
-      <Group title="Your studies" onEdit={() => onEdit(2)}>
+      <Group title="About you" onEdit={() => onEdit(1, "sec-contact")}>
+        <Row label="Name" value={or(`${form.firstName} ${form.lastName}`)} />
+        <Row label="Pronouns" value={or(form.pronouns)} />
+        <Row label="Georgia Tech email" value={or(form.gtEmail)} />
+        <Row label="Personal email" value={or(form.personalEmail)} />
+        <Row label="Phone" value={or(form.phone)} />
         <Row label="Classification" value={labelOf(CLASSIFICATIONS, form.classification)} />
-        <Row
-          label="Graduating"
-          value={`${labelOf(SEASONS, form.graduationSeason)} ${form.graduationYear}`}
-        />
+        <Row label="Graduating" value={graduation} />
         <Row label="GPA" value={labelOf(GPA_RANGES, form.gpa)} />
-        <Row label="Major" value={form.major} />
-        {form.minor ? <Row label="Minor" value={form.minor} /> : null}
-      </Group>
-
-      <Group title="Experience" onEdit={() => onEdit(3)}>
-        <Row
-          label="Affiliations"
-          value={
-            form.affiliations.length > 0
-              ? form.affiliations.map((value) => labelOf(AFFILIATIONS, value)).join(", ")
-              : "None selected"
-          }
-        />
-        {form.linkedin ? <Row label="LinkedIn" value={form.linkedin} /> : null}
-        {form.github ? <Row label="GitHub" value={form.github} /> : null}
+        <Row label="Major" value={or(form.major)} />
+        <Row label="Minor" value={or(form.minor)} />
+        <Row label="LinkedIn" value={or(form.linkedin)} />
+        <Row label="GitHub" value={or(form.github)} />
         <Row label="Resume" value={form.resume ? form.resume.name : "Not attached"} />
-      </Group>
-
-      <Group title="What you want from ColorStack" onEdit={() => onEdit(4)}>
-        <Row
-          label="Interests"
-          value={form.interests.length > 0 ? form.interests.join(", ") : "None selected"}
-        />
-        <Row
-          label="Social events"
-          value={form.socialEvents.length > 0 ? form.socialEvents.join(", ") : "None selected"}
-        />
-        {COMMUNITIES.map((community) => (
-          <Row key={community.key} label={community.linkLabel} value={yesNo(form[community.key])} />
-        ))}
-      </Group>
-
-      <Group title="Background" onEdit={() => onEdit(5)}>
         <Row label="Race &amp; ethnicity" value={labelOf(RACE_ETHNICITIES, form.raceEthnicity)} />
         <Row label="Gender" value={labelOf(GENDERS, form.gender)} />
         <Row label="First-generation" value={labelOf(YES_NO_PRIVATE, form.firstGeneration)} />
         <Row label="Low-income" value={labelOf(YES_NO_PRIVATE, form.lowIncome)} />
+      </Group>
+
+      <Group title="Your interests" onEdit={() => onEdit(2, "sec-affiliations")}>
+        <Row
+          label="Affiliations"
+          value={list(form.affiliations.map((value) => labelOf(AFFILIATIONS, value)))}
+        />
+        <Row label="Interests" value={list(form.interests)} />
+        <Row label="Social events" value={list(form.socialEvents)} />
+      </Group>
+
+      <Group title="Connections" onEdit={() => onEdit(3, "sec-connections")}>
+        {COMMUNITIES.map((community) => (
+          <Row key={community.key} label={community.linkLabel} value={yesNo(form[community.key])} />
+        ))}
       </Group>
 
       <div className="border-t border-neutral-rule-cream pt-6">

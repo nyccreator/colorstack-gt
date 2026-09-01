@@ -5,42 +5,22 @@ import { useAction } from "convex/react";
 import { ConvexError } from "convex/values";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
+import { Joining, You, YourInterests } from "./chapters";
 import { Rail } from "./rail";
-import { Review } from "./review";
-import { emptyForm, type Errors, type FormState, toSubmission, validateStep } from "./state";
-import { AboutYou, Background, Experience, WhatYouWant, YourStudies } from "./steps";
+import {
+  emptyForm,
+  type Errors,
+  firstErrorSection,
+  type FormState,
+  sectionProgress,
+  toSubmission,
+  validateChapter,
+} from "./state";
 
 const HEADINGS = [
-  {
-    lead: "About ",
-    accent: "you",
-    intro: "Your Georgia Tech email is how you'll sign in and check into events.",
-  },
-  {
-    lead: "Your ",
-    accent: "studies",
-    intro: "So we can group you with people in your year and share the right opportunities.",
-  },
-  {
-    lead: "Your ",
-    accent: "experience",
-    intro: "What you are part of outside class, and how partners can find you.",
-  },
-  {
-    lead: "What you want from ",
-    accent: "ColorStack",
-    intro: "Pick as many as apply. It tells the e-board what to program this semester.",
-  },
-  {
-    lead: "A little about your ",
-    accent: "background",
-    intro: "Used for chapter reporting to ColorStack nationally, always in aggregate.",
-  },
-  {
-    lead: "Before you ",
-    accent: "join",
-    intro: "Check everything over, then we'll email you a link to finish.",
-  },
+  { lead: "About ", accent: "you", next: "Continue to Your interests" },
+  { lead: "Your ", accent: "interests", next: "Continue to Joining" },
+  { lead: "Before you ", accent: "join", next: "Become a Member" },
 ] as const;
 
 const LAST = HEADINGS.length;
@@ -50,7 +30,7 @@ export function RegisterForm({ email }: { email?: string }) {
   const start = useAction(api.members.start);
   const register = useAction(api.members.register);
 
-  const [step, setStep] = useState(1);
+  const [chapter, setChapter] = useState(1);
   const [form, setForm] = useState<FormState>(() => emptyForm(email));
   const [errors, setErrors] = useState<Errors>({});
   const [submitting, setSubmitting] = useState(false);
@@ -58,14 +38,35 @@ export function RegisterForm({ email }: { email?: string }) {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const heading = useRef<HTMLHeadingElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
   const moved = useRef(false);
+  /** The section to land on once the new chapter has rendered. */
+  const anchor = useRef<string | null>(null);
   /** Kept so a failed submit does not upload the same file again. */
   const uploaded = useRef<string | undefined>(undefined);
 
   useEffect(() => {
-    if (moved.current) heading.current?.focus();
+    if (!moved.current) return;
     moved.current = false;
-  }, [step]);
+
+    const target = anchor.current;
+    anchor.current = null;
+
+    if (target) {
+      focusSection(target);
+      return;
+    }
+    heading.current?.focus();
+    scroller.current?.scrollTo({ top: 0 });
+    window.scrollTo({ top: 0 });
+  }, [chapter]);
+
+  function focusSection(id: string) {
+    const element = document.getElementById(id);
+    if (!element) return;
+    element.focus({ preventScroll: true });
+    element.scrollIntoView({ block: "start" });
+  }
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     if (key === "resume") uploaded.current = undefined;
@@ -73,23 +74,51 @@ export function RegisterForm({ email }: { email?: string }) {
     setErrors((previous) => ({ ...previous, [key]: undefined }));
   }
 
-  function goTo(next: number) {
+  /** Puts someone on the chapter that failed, with its errors showing. */
+  function reject(target: number, found: Errors) {
+    const section = firstErrorSection(found);
+    setErrors(found);
+
+    if (target === chapter) {
+      if (section) focusSection(section);
+      return;
+    }
     moved.current = true;
+    anchor.current = section ?? null;
+    setChapter(target);
+  }
+
+  function goTo(next: number, section?: string) {
+    if (next === chapter) {
+      if (section) focusSection(section);
+      return;
+    }
+
+    for (let step = chapter; step < next; step++) {
+      const found = validateChapter(step, form);
+      if (Object.keys(found).length > 0) {
+        reject(step, found);
+        return;
+      }
+    }
+
+    moved.current = true;
+    anchor.current = section ?? null;
     setErrors({});
-    setStep(next);
+    setChapter(next);
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitError(null);
 
-    const found = validateStep(step, form);
+    const found = validateChapter(chapter, form);
     if (Object.keys(found).length > 0) {
-      setErrors(found);
+      reject(chapter, found);
       return;
     }
 
-    if (step === 1) {
+    if (chapter === 1) {
       setChecking(true);
       try {
         if ((await start({ gtEmail: form.gtEmail })) === "link_sent") {
@@ -109,8 +138,8 @@ export function RegisterForm({ email }: { email?: string }) {
       }
     }
 
-    if (step < LAST) {
-      goTo(step + 1);
+    if (chapter < LAST) {
+      goTo(chapter + 1);
       return;
     }
 
@@ -145,50 +174,47 @@ export function RegisterForm({ email }: { email?: string }) {
     }
   }
 
-  const { lead, accent, intro } = HEADINGS[step - 1];
+  const { lead, accent, next } = HEADINGS[chapter - 1];
+  const progress = sectionProgress(form, errors);
 
   return (
-    <div className="relative min-h-dvh md:grid md:grid-cols-[auto_1fr]">
+    <div className="relative flex min-h-dvh flex-col md:grid md:h-dvh md:grid-cols-[auto_1fr] md:overflow-hidden">
       <div className="wash-register" />
-      <Rail current={step} />
+      <Rail current={chapter} progress={progress} onGo={goTo} />
 
       <form
         onSubmit={onSubmit}
         noValidate
-        className="relative flex min-h-dvh flex-col bg-diploma px-6 py-10 text-neutral-ink-navy sm:px-10 md:px-14 md:py-12"
+        className="relative flex flex-1 flex-col bg-diploma text-neutral-ink-navy md:h-dvh md:overflow-hidden"
       >
-        <div className="flex flex-1 flex-col">
+        <div
+          ref={scroller}
+          className="flex-1 px-6 pt-10 pb-12 sm:px-10 md:min-h-0 md:overflow-y-auto md:px-14 md:pt-11"
+        >
           <h2 ref={heading} tabIndex={-1} className="type-display text-step outline-none">
             {lead}
             <span className="text-gold-dark italic">{accent}</span>
           </h2>
-          <p className="mt-3 mb-8 max-w-[80ch] text-body leading-copy text-neutral-body-cream">
-            {intro}
+          {chapter === 1 ? <You form={form} errors={errors} set={set} /> : null}
+          {chapter === 2 ? <YourInterests form={form} errors={errors} set={set} /> : null}
+          {chapter === 3 ? <Joining form={form} errors={errors} set={set} onEdit={goTo} /> : null}
+
+          <p aria-live="polite" className="sr-only">
+            Chapter {chapter} of {LAST}
           </p>
 
-          {step === 1 ? <AboutYou form={form} errors={errors} set={set} /> : null}
-          {step === 2 ? <YourStudies form={form} errors={errors} set={set} /> : null}
-          {step === 3 ? <Experience form={form} errors={errors} set={set} /> : null}
-          {step === 4 ? <WhatYouWant form={form} errors={errors} set={set} /> : null}
-          {step === 5 ? <Background form={form} errors={errors} set={set} /> : null}
-          {step === LAST ? <Review form={form} onEdit={goTo} /> : null}
+          {submitError ? (
+            <p role="alert" className="mt-6 text-note text-error">
+              {submitError}
+            </p>
+          ) : null}
         </div>
 
-        <p aria-live="polite" className="sr-only">
-          Step {step} of {LAST}
-        </p>
-
-        {submitError ? (
-          <p role="alert" className="mt-6 text-note text-error">
-            {submitError}
-          </p>
-        ) : null}
-
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-4 pt-8">
-          {step > 1 ? (
+        <div className="sticky bottom-0 flex flex-wrap items-center gap-x-5 gap-y-4 border-t border-neutral-rule-cream bg-neutral-cream-raised px-6 py-4 sm:px-10 md:px-14">
+          {chapter > 1 ? (
             <button
               type="button"
-              onClick={() => goTo(step - 1)}
+              onClick={() => goTo(chapter - 1)}
               className="cursor-pointer rounded-pill border border-neutral-border-input px-7 py-4 text-small font-medium whitespace-nowrap text-neutral-body-cream hover:border-gold hover:text-neutral-ink-navy"
             >
               Back
@@ -199,10 +225,10 @@ export function RegisterForm({ email }: { email?: string }) {
             type="submit"
             disabled={submitting || checking}
             className={`cursor-pointer rounded-pill px-8 py-4 text-body font-semibold whitespace-nowrap hover:opacity-[0.88] disabled:cursor-wait disabled:opacity-60 ${
-              step === LAST ? "bg-buzz text-navy" : "bg-navy text-diploma"
+              chapter === LAST ? "bg-buzz text-navy" : "bg-navy text-diploma"
             }`}
           >
-            {step === LAST ? (submitting ? "Sending…" : "Become a Member") : "Continue"}
+            {chapter === LAST && submitting ? "Sending…" : next}
           </button>
 
           <Link

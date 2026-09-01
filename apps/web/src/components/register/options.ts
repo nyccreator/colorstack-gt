@@ -1,6 +1,16 @@
-import type { Submission } from "./state";
+import type { ProgressKey, Submission } from "./state";
 
 type Options<T extends string> = readonly { value: T; label: string }[];
+
+type Section = {
+  id: string;
+  chapter: number;
+  label: string;
+  /** Must be answered before the chapter lets you past it. Drives the rail's counts. */
+  required: readonly ProgressKey[];
+  /** Counted only so an error on one can be traced back to its section. */
+  optional: readonly ProgressKey[];
+};
 
 export const CLASSIFICATIONS = [
   { value: "first_year", label: "First-year" },
@@ -82,11 +92,6 @@ export const GENDERS = [
   { value: "prefer_not_to_say", label: "Prefer not to say" },
 ] as const satisfies Options<Submission["demographics"]["gender"]>;
 
-export const YES_NO = [
-  { value: "yes", label: "Yes" },
-  { value: "no", label: "No" },
-] as const;
-
 export const YES_NO_PRIVATE = [
   { value: "yes", label: "Yes" },
   { value: "no", label: "No" },
@@ -104,7 +109,7 @@ export const COMMUNITIES = [
     key: "engageJoined",
     label: "Have you joined ColorStack on Engage?",
     linkLabel: "Join on Engage",
-    href: "https://gatech.campuslabs.com/engage/",
+    href: "https://gatech.campuslabs.com/engage/organization/colorstack-at-gt",
   },
   {
     key: "instagramFollowed",
@@ -116,15 +121,69 @@ export const COMMUNITIES = [
     key: "whatsappJoined",
     label: "Have you joined our WhatsApp community?",
     linkLabel: "Join on WhatsApp",
-    href: "https://chat.whatsapp.com/GeflwhJgwTq7GOzvHVPv7p",
+    href: "https://chat.whatsapp.com/GefIwhJgwTq7GOzvHVPv7p",
   },
 ] as const;
 
-export const STEPS = [
-  "About you",
-  "Your studies",
-  "Experience",
-  "What you want from ColorStack",
-  "Background",
-  "Before you join",
+export const CHAPTERS = [
+  { num: "01", title: "You" },
+  { num: "02", title: "Your interests" },
+  { num: "03", title: "Joining" },
 ] as const;
+
+/**
+ * The anchors the rail scrolls to, and the fields each one counts toward
+ * progress.
+ */
+export const SECTIONS = [
+  {
+    id: "sec-contact",
+    chapter: 1,
+    label: "Contact",
+    required: ["firstName", "lastName", "pronouns", "gtEmail", "personalEmail", "phone"],
+    optional: [],
+  },
+  {
+    id: "sec-studies",
+    chapter: 1,
+    label: "Studies",
+    required: ["classification", "graduation", "gpa", "major"],
+    optional: ["minor"],
+  },
+  {
+    id: "sec-links",
+    chapter: 1,
+    label: "Links",
+    required: [],
+    optional: ["linkedin", "github", "resume"],
+  },
+  {
+    id: "sec-background",
+    chapter: 1,
+    label: "Background",
+    required: ["raceEthnicity", "gender", "firstGeneration", "lowIncome"],
+    optional: [],
+  },
+  {
+    id: "sec-affiliations",
+    chapter: 2,
+    label: "Affiliations",
+    required: [],
+    optional: ["affiliations"],
+  },
+  {
+    id: "sec-want",
+    chapter: 2,
+    label: "What you want",
+    required: [],
+    optional: ["interests", "socialEvents"],
+  },
+  {
+    id: "sec-connections",
+    chapter: 3,
+    label: "Connections",
+    required: ["nationalMember", "engageJoined", "instagramFollowed", "whatsappJoined"],
+    optional: [],
+  },
+  { id: "sec-review", chapter: 3, label: "Review", required: [], optional: [] },
+] as const satisfies readonly Section[];

@@ -7,6 +7,8 @@ import {
 } from "@colorstack-gt/backend/convex/lib/identity";
 import type { FunctionArgs } from "convex/server";
 
+import { SECTIONS } from "./options";
+
 export type Submission = FunctionArgs<typeof api.members.register>;
 
 export type FormState = {
@@ -39,6 +41,28 @@ export type FormState = {
 };
 
 export type Errors = Partial<Record<keyof FormState, string>>;
+
+/** A field the rail counts, plus the pairing that stands in for the two graduation selects. */
+export type ProgressKey = keyof FormState | "graduation";
+
+export type SectionProgress = {
+  id: string;
+  chapter: number;
+  label: string;
+  /** Required answers given, out of the required answers asked for. */
+  done: number;
+  total: number;
+  /** How many optional fields the section holds, which nothing is counted against. */
+  optional: number;
+  complete: boolean;
+  /** Whether any field in the section is currently showing an error. */
+  error: boolean;
+};
+
+/** Nothing required and nothing given still counts as done. Empty sections never do. */
+export function isComplete(done: number, total: number, optional: number): boolean {
+  return total > 0 ? done === total : optional > 0;
+}
 
 export function emptyForm(email?: string): FormState {
   return {
@@ -131,12 +155,53 @@ export function toSubmission(form: FormState, resumeUploadToken?: string): Submi
   };
 }
 
-export function validateStep(step: number, form: FormState): Errors {
+function isFilled(form: FormState, key: ProgressKey): boolean {
+  if (key === "graduation") return Boolean(form.graduationSeason && form.graduationYear);
+
+  const value: FormState[keyof FormState] = form[key];
+  if (value === null) return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "string") return value.trim().length > 0;
+  return true;
+}
+
+export function sectionProgress(form: FormState, errors: Errors): SectionProgress[] {
+  return SECTIONS.map((section) => {
+    const done = section.required.filter((key) => isFilled(form, key)).length;
+    const total = section.required.length;
+    const optional = section.optional.length;
+    return {
+      id: section.id,
+      chapter: section.chapter,
+      label: section.label,
+      done,
+      total,
+      optional,
+      complete: isComplete(done, total, optional),
+      error: [...section.required, ...section.optional].some((key) => hasError(errors, key)),
+    };
+  });
+}
+
+function hasError(errors: Errors, key: ProgressKey): boolean {
+  if (key === "graduation") return Boolean(errors.graduationSeason ?? errors.graduationYear);
+  return Boolean(errors[key]);
+}
+
+/** The section to send someone to when Continue turns up errors. */
+export function firstErrorSection(errors: Errors): string | undefined {
+  return SECTIONS.find((section) =>
+    [...section.required, ...section.optional].some((key) => hasError(errors, key)),
+  )?.id;
+}
+
+export function validateChapter(chapter: number, form: FormState): Errors {
   const errors: Errors = {};
 
-  if (step === 1) {
+  if (chapter === 1) {
     if (!form.firstName.trim()) errors.firstName = "Enter your first name.";
     if (!form.lastName.trim()) errors.lastName = "Enter your last name.";
+    if (!form.pronouns.trim()) errors.pronouns = "Enter your pronouns.";
     if (!form.gtEmail.trim()) {
       errors.gtEmail = "Enter your Georgia Tech email.";
     } else if (!isGeorgiaTechEmail(form.gtEmail)) {
@@ -149,23 +214,18 @@ export function validateStep(step: number, form: FormState): Errors {
     } else if (normalizeEmail(form.personalEmail) === normalizeEmail(form.gtEmail)) {
       errors.personalEmail = "Use an address other than your Georgia Tech email.";
     }
-    if (!form.pronouns.trim()) errors.pronouns = "Enter your pronouns.";
     if (!form.phone.trim()) {
       errors.phone = "Enter your phone number.";
     } else if (!isPhone(form.phone)) {
       errors.phone = "Enter a valid phone number.";
     }
-  }
 
-  if (step === 2) {
     if (!form.classification) errors.classification = "Choose your classification.";
     if (!form.graduationSeason) errors.graduationSeason = "Choose a season.";
     if (!form.graduationYear) errors.graduationYear = "Choose a year.";
     if (!form.gpa) errors.gpa = "Choose a range.";
     if (!form.major.trim()) errors.major = "Enter your major.";
-  }
 
-  if (step === 3) {
     if (form.linkedin.trim() && !isProfileUrl(form.linkedin)) {
       errors.linkedin = "Enter a valid LinkedIn link.";
     }
@@ -176,20 +236,18 @@ export function validateStep(step: number, form: FormState): Errors {
       if (form.resume.type !== "application/pdf") errors.resume = "Upload a PDF.";
       else if (form.resume.size > RESUME_MAX_BYTES) errors.resume = "Keep the file under 5MB.";
     }
-  }
 
-  if (step === 4) {
-    if (!form.nationalMember) errors.nationalMember = "Choose an answer.";
-    if (!form.engageJoined) errors.engageJoined = "Choose an answer.";
-    if (!form.instagramFollowed) errors.instagramFollowed = "Choose an answer.";
-    if (!form.whatsappJoined) errors.whatsappJoined = "Choose an answer.";
-  }
-
-  if (step === 5) {
     if (!form.raceEthnicity) errors.raceEthnicity = "Choose an answer.";
     if (!form.gender) errors.gender = "Choose an answer.";
     if (!form.firstGeneration) errors.firstGeneration = "Choose an answer.";
     if (!form.lowIncome) errors.lowIncome = "Choose an answer.";
+  }
+
+  if (chapter === 3) {
+    if (!form.nationalMember) errors.nationalMember = "Choose an answer.";
+    if (!form.engageJoined) errors.engageJoined = "Choose an answer.";
+    if (!form.instagramFollowed) errors.instagramFollowed = "Choose an answer.";
+    if (!form.whatsappJoined) errors.whatsappJoined = "Choose an answer.";
   }
 
   return errors;
