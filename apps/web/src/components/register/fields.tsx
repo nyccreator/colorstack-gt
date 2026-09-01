@@ -97,7 +97,6 @@ export function Field({
 export function FieldGroup({
   id,
   label,
-  hint,
   error,
   required,
   className,
@@ -105,7 +104,6 @@ export function FieldGroup({
 }: {
   id: string;
   label: string;
-  hint?: string;
   error?: string;
   required?: boolean;
   className?: string;
@@ -117,7 +115,6 @@ export function FieldGroup({
         {label}
         {required ? <Asterisk /> : null}
       </p>
-      {hint ? <p className="mb-3 text-detail text-neutral-body-cream">{hint}</p> : null}
       <div role="group" aria-labelledby={`${id}-label`}>
         {children}
       </div>
@@ -178,7 +175,7 @@ export function Select({
   );
 }
 
-export function Chip({
+export function Choice({
   label,
   selected,
   onToggle,
@@ -192,14 +189,18 @@ export function Chip({
       type="button"
       aria-pressed={selected}
       onClick={onToggle}
-      className={`flex cursor-pointer items-center gap-2 rounded-pill border px-5 py-3 text-small transition-colors ${
-        selected
-          ? "border-navy bg-navy font-semibold text-diploma"
-          : "border-neutral-border-input bg-white text-neutral-ink-navy hover:border-gold"
-      }`}
+      className="group flex min-h-touch cursor-pointer items-center gap-3 text-left"
     >
-      {selected ? <Check className="size-3.75 text-buzz" /> : null}
-      {label}
+      <span
+        className={`flex size-7 shrink-0 items-center justify-center rounded-input border transition-colors ${
+          selected
+            ? "border-navy bg-navy text-buzz"
+            : "border-neutral-border-input bg-white text-transparent group-hover:border-gold"
+        }`}
+      >
+        <Check className="size-4" />
+      </span>
+      <span className="text-small text-neutral-ink-navy">{label}</span>
     </button>
   );
 }

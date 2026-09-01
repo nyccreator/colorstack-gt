@@ -1,6 +1,6 @@
 import { graduationYearOptions } from "@colorstack-gt/backend/convex/lib/graduation";
 
-import { Chip, Field, FieldGroup, Section, Select, TextInput, YesNo } from "./fields";
+import { Choice, Field, FieldGroup, Section, Select, TextInput, YesNo } from "./fields";
 import {
   AFFILIATIONS,
   CLASSIFICATIONS,
@@ -289,9 +289,9 @@ export function YourInterests({ form, set }: ChapterProps) {
   return (
     <>
       <Section id="sec-affiliations" label="Affiliations">
-        <div className="mt-5 flex flex-wrap gap-3">
+        <div className="mt-5 grid gap-x-6 gap-y-2 sm:grid-cols-2">
           {AFFILIATIONS.map((option) => (
-            <Chip
+            <Choice
               key={option.value}
               label={option.label}
               selected={form.affiliations.includes(option.value)}
@@ -302,15 +302,10 @@ export function YourInterests({ form, set }: ChapterProps) {
       </Section>
 
       <Section id="sec-want" label="What you want from ColorStack">
-        <FieldGroup
-          id="interests"
-          label="What are you looking for"
-          hint="Pick as many as apply. It tells the e-board what to program this semester."
-          className="mt-5"
-        >
-          <div className="flex flex-wrap gap-3">
+        <FieldGroup id="interests" label="What are you looking for" className="mt-5">
+          <div className="grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
             {INTERESTS.map((label) => (
-              <Chip
+              <Choice
                 key={label}
                 label={label}
                 selected={form.interests.includes(label)}
@@ -320,15 +315,10 @@ export function YourInterests({ form, set }: ChapterProps) {
           </div>
         </FieldGroup>
 
-        <FieldGroup
-          id="socialEvents"
-          label="Social events you would come to"
-          hint="Pick anything you would show up for. It tells the e-board what to plan."
-          className="mt-8"
-        >
-          <div className="flex flex-wrap gap-3">
+        <FieldGroup id="socialEvents" label="Social events you would come to" className="mt-8">
+          <div className="grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
             {SOCIAL_EVENTS.map((label) => (
-              <Chip
+              <Choice
                 key={label}
                 label={label}
                 selected={form.socialEvents.includes(label)}
