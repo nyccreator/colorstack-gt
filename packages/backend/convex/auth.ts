@@ -1,40 +1,18 @@
-import { type AuthFunctions, createClient, type GenericCtx } from "@convex-dev/better-auth";
+import { createClient, type GenericCtx } from "@convex-dev/better-auth";
 import { convex } from "@convex-dev/better-auth/plugins";
 import { requireRunMutationCtx } from "@convex-dev/better-auth/utils";
-import { magicLink } from "better-auth/plugins/magic-link";
+import { emailOTP } from "better-auth/plugins/email-otp";
 import { betterAuth } from "better-auth/minimal";
 
 import { components, internal } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import authConfig from "./auth.config";
-import { MAGIC_LINK_EXPIRY_SECONDS, MAGIC_LINK_RATE_LIMIT } from "./lib/config";
-import { isGeorgiaTechEmail, normalizeEmail } from "./lib/identity";
+import { OTP_ALLOWED_ATTEMPTS, OTP_EXPIRY_SECONDS, OTP_LENGTH, OTP_RATE_LIMIT } from "./lib/config";
+import { isGeorgiaTechEmail } from "./lib/identity";
 
 const siteUrl = process.env.SITE_URL!;
 
-// The annotation breaks a type cycle between this value and the generated api.
-export const authComponent: ReturnType<typeof createClient<DataModel>> = createClient<DataModel>(
-  components.betterAuth,
-  {
-    authFunctions: internal.auth as AuthFunctions,
-    triggers: {
-      user: {
-        onCreate: async (ctx, user) => {
-          const member = await ctx.db
-            .query("members")
-            .withIndex("by_gtEmail", (q) => q.eq("gtEmail", normalizeEmail(user.email)))
-            .unique();
-
-          if (!member) return;
-
-          await ctx.db.patch(member._id, { userId: user._id, verifiedAt: Date.now() });
-        },
-      },
-    },
-  },
-);
-
-export const { onCreate, onUpdate, onDelete } = authComponent.triggersApi();
+export const authComponent = createClient<DataModel>(components.betterAuth);
 
 function createAuth(ctx: GenericCtx<DataModel>) {
   return betterAuth({
@@ -42,20 +20,20 @@ function createAuth(ctx: GenericCtx<DataModel>) {
     trustedOrigins: [siteUrl],
     database: authComponent.adapter(ctx),
     plugins: [
-      magicLink({
-        expiresIn: MAGIC_LINK_EXPIRY_SECONDS,
-        rateLimit: MAGIC_LINK_RATE_LIMIT,
-        sendMagicLink: async ({ email, url, token }) => {
-          if (!isGeorgiaTechEmail(email)) return;
+      emailOTP({
+        otpLength: OTP_LENGTH,
+        expiresIn: OTP_EXPIRY_SECONDS,
+        allowedAttempts: OTP_ALLOWED_ATTEMPTS,
+        rateLimit: OTP_RATE_LIMIT,
+        storeOTP: "hashed",
+        sendVerificationOTP: async ({ email, otp }) => {
+          if (!isGeorgiaTechEmail(email)) {
+            throw new Error("Accounts are for Georgia Tech students.");
+          }
 
-          const callbackURL = new URL(url).searchParams.get("callbackURL") ?? "/";
-          const confirm = new URL("/verify", siteUrl);
-          confirm.searchParams.set("token", token);
-          confirm.searchParams.set("callbackURL", callbackURL);
-
-          await requireRunMutationCtx(ctx).scheduler.runAfter(0, internal.email.sendMagicLink, {
+          await requireRunMutationCtx(ctx).scheduler.runAfter(0, internal.email.sendCode, {
             email,
-            url: confirm.toString(),
+            code: otp,
           });
         },
       }),

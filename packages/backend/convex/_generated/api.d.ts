@@ -9,27 +9,31 @@
  */
 
 import type * as auth from "../auth.js";
-import type * as crons from "../crons.js";
 import type * as email from "../email.js";
 import type * as healthCheck from "../healthCheck.js";
 import type * as http from "../http.js";
 import type * as lib_config from "../lib/config.js";
 import type * as lib_graduation from "../lib/graduation.js";
 import type * as lib_identity from "../lib/identity.js";
+import type * as lib_programs from "../lib/programs.js";
+import type * as lib_roster from "../lib/roster.js";
 import type * as members from "../members.js";
+import type * as roster from "../roster.js";
 
 import type { ApiFromModules, FilterApi, FunctionReference } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
-  crons: typeof crons;
   email: typeof email;
   healthCheck: typeof healthCheck;
   http: typeof http;
   "lib/config": typeof lib_config;
   "lib/graduation": typeof lib_graduation;
   "lib/identity": typeof lib_identity;
+  "lib/programs": typeof lib_programs;
+  "lib/roster": typeof lib_roster;
   members: typeof members;
+  roster: typeof roster;
 }>;
 
 /**

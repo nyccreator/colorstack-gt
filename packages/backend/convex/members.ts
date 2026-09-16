@@ -1,202 +1,286 @@
-import { ConvexError, type Infer, v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
-import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { action, internalMutation, internalQuery, query } from "./_generated/server";
-import { authComponent, createAuth } from "./auth";
-import { RESUME_SWEEP_BATCH, RESUME_UPLOAD_TTL_MS } from "./lib/config";
+import {
+  internalMutation,
+  mutation,
+  type MutationCtx,
+  query,
+  type QueryCtx,
+} from "./_generated/server";
+import { authComponent } from "./auth";
+import { TEXT_MAX_LENGTH } from "./lib/config";
 import { isGraduationYearAllowed } from "./lib/graduation";
-import { isGeorgiaTechEmail, isPhone, normalizeEmail } from "./lib/identity";
-import { demographicAnswers, registrationFields } from "./schema";
+import { isEmail, isPhone, isProfileUrl, normalizeEmail, normalizeUrl } from "./lib/identity";
+import {
+  contactFields,
+  demographicAnswers,
+  interestFields,
+  materialsFields,
+  nameFields,
+  studiesFields,
+  task,
+} from "./schema";
 
-const outcome = v.union(v.literal("saved"), v.literal("exists"));
+const skippable = v.union(v.literal(4), v.literal(6));
 
-type Outcome = Infer<typeof outcome>;
+function findMember(ctx: QueryCtx, userId: string) {
+  return ctx.db
+    .query("members")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .unique();
+}
 
-const submission = {
-  ...registrationFields,
-  resumeUploadToken: v.optional(v.string()),
-  demographics: v.object(demographicAnswers),
-};
+function findDemographics(ctx: QueryCtx, memberId: Id<"members">) {
+  return ctx.db
+    .query("demographics")
+    .withIndex("by_member", (q) => q.eq("memberId", memberId))
+    .unique();
+}
 
-/** Whether any member row already uses this address, confirmed or not. */
-export const exists = internalQuery({
-  args: { gtEmail: v.string() },
-  returns: v.boolean(),
-  handler: async (ctx, args) => {
-    const member = await ctx.db
-      .query("members")
-      .withIndex("by_gtEmail", (q) => q.eq("gtEmail", args.gtEmail))
-      .unique();
-    return member !== null;
-  },
-});
+async function ownRow(ctx: MutationCtx) {
+  const user = await authComponent.safeGetAuthUser(ctx);
+  if (!user) throw new ConvexError("Sign in to continue.");
 
-/**
- * Starts a sign up. Emails a sign in link if the address is already taken,
- * otherwise reports that the form should be filled in.
- */
-export const start = action({
-  args: { gtEmail: v.string() },
-  returns: v.union(v.literal("register"), v.literal("link_sent")),
-  handler: async (ctx, args) => {
-    const gtEmail = normalizeEmail(args.gtEmail);
+  const existing = await findMember(ctx, user._id);
+  if (existing) return { user, member: existing };
 
-    if (!isGeorgiaTechEmail(gtEmail)) {
-      throw new ConvexError("Enter a Georgia Tech email address.");
+  const id = await ctx.db.insert("members", { userId: user._id, step: 0, tasksDone: [] });
+  return { user, member: (await ctx.db.get(id))! };
+}
+
+function withinLimit(args: Record<string, unknown>) {
+  for (const value of Object.values(args)) {
+    if (typeof value === "string" && value.length > TEXT_MAX_LENGTH) {
+      throw new ConvexError(`Keep each answer under ${TEXT_MAX_LENGTH} characters.`);
     }
+  }
+}
 
-    if (!(await ctx.runQuery(internal.members.exists, { gtEmail }))) {
-      return "register";
-    }
+function required(value: string, message: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) throw new ConvexError(message);
+  return trimmed;
+}
 
-    const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
-    await auth.api.signInMagicLink({ body: { email: gtEmail, callbackURL: "/portal" }, headers });
-    return "link_sent";
-  },
+function profileLink(value: string | undefined, message: string): string | undefined {
+  const url = normalizeUrl(value ?? "");
+  if (url && !isProfileUrl(url)) throw new ConvexError(message);
+  return url;
+}
+
+const profile = v.object({
+  gtEmail: v.string(),
+  step: v.number(),
+  name: v.optional(v.object(nameFields)),
+  contact: v.optional(v.object(contactFields)),
+  studies: v.optional(v.object(studiesFields)),
+  materials: v.optional(v.object(materialsFields)),
+  interests: v.optional(v.object(interestFields)),
+  resume: v.optional(v.object({ name: v.string(), size: v.number() })),
+  tasksDone: v.array(task),
+  reported: v.boolean(),
+  onRoster: v.boolean(),
+  complete: v.boolean(),
 });
 
 export const me = query({
   args: {},
-  returns: v.union(v.object({ firstName: v.string() }), v.null()),
+  returns: v.union(profile, v.null()),
   handler: async (ctx) => {
     const user = await authComponent.safeGetAuthUser(ctx);
     if (!user) return null;
 
-    const member =
+    const member = await findMember(ctx, user._id);
+    const reported = member ? (await findDemographics(ctx, member._id)) !== null : false;
+    const gtEmail = normalizeEmail(user.email);
+    const onRoster =
       (await ctx.db
-        .query("members")
-        .withIndex("by_userId", (q) => q.eq("userId", user._id))
-        .unique()) ??
-      (await ctx.db
-        .query("members")
-        .withIndex("by_gtEmail", (q) => q.eq("gtEmail", normalizeEmail(user.email)))
-        .unique());
+        .query("roster")
+        .withIndex("by_email", (q) => q.eq("email", gtEmail))
+        .first()) !== null;
 
-    return member ? { firstName: member.firstName } : null;
+    return {
+      gtEmail,
+      step: member?.step ?? 0,
+      name: member?.name,
+      contact: member?.contact,
+      studies: member?.studies,
+      materials: member?.materials,
+      interests: member?.interests,
+      resume: member?.resume && { name: member.resume.name, size: member.resume.size },
+      tasksDone: member?.tasksDone ?? [],
+      reported,
+      onRoster,
+      complete: Boolean(member?.name && member.contact && member.studies && reported),
+    };
   },
 });
 
-/** Records a stored file as unclaimed so a registration can claim it later. */
-export const recordUpload = internalMutation({
-  args: { token: v.string(), storageId: v.id("_storage") },
+export const myDemographics = query({
+  args: {},
+  returns: v.union(v.object(demographicAnswers), v.null()),
+  handler: async (ctx) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) return null;
+
+    const member = await findMember(ctx, user._id);
+    const row = member && (await findDemographics(ctx, member._id));
+    if (!row) return null;
+
+    const { raceEthnicity, gender, firstGeneration, lowIncome } = row;
+    return { raceEthnicity, gender, firstGeneration, lowIncome };
+  },
+});
+
+export const saveName = mutation({
+  args: nameFields,
   returns: v.null(),
   handler: async (ctx, args) => {
-    await ctx.db.insert("resumeUploads", {
-      ...args,
-      expiresAt: Date.now() + RESUME_UPLOAD_TTL_MS,
+    withinLimit(args);
+    const name = {
+      firstName: required(args.firstName, "Enter your first name."),
+      lastName: required(args.lastName, "Enter your last name."),
+      pronouns: required(args.pronouns, "Choose your pronouns."),
+    };
+    const { member } = await ownRow(ctx);
+    await ctx.db.patch(member._id, { name, step: Math.max(member.step, 1) });
+    return null;
+  },
+});
+
+export const saveContact = mutation({
+  args: contactFields,
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    withinLimit(args);
+    const { user, member } = await ownRow(ctx);
+    const personalEmail = normalizeEmail(args.personalEmail);
+
+    if (!isEmail(personalEmail)) throw new ConvexError("Enter a valid email address.");
+    if (personalEmail === normalizeEmail(user.email)) {
+      throw new ConvexError("Use an address other than your Georgia Tech email.");
+    }
+    if (!isPhone(args.phone)) throw new ConvexError("Enter a valid phone number.");
+
+    await ctx.db.patch(member._id, {
+      contact: { personalEmail, phone: args.phone.trim() },
+      step: Math.max(member.step, 2),
     });
     return null;
   },
 });
 
-/** Writes a registration, unless the address belongs to a confirmed member. */
-export const saveSubmission = internalMutation({
-  args: submission,
-  returns: outcome,
-  handler: async (ctx, { demographics, resumeUploadToken, ...member }) => {
-    const pending = resumeUploadToken
-      ? await ctx.db
-          .query("resumeUploads")
-          .withIndex("by_token", (q) => q.eq("token", resumeUploadToken))
-          .unique()
-      : null;
-
-    if (pending) await ctx.db.delete(pending._id);
-    const resume = pending && pending.expiresAt > Date.now() ? pending.storageId : undefined;
-    if (pending && !resume) await ctx.storage.delete(pending.storageId);
-
-    const existing = await ctx.db
-      .query("members")
-      .withIndex("by_gtEmail", (q) => q.eq("gtEmail", member.gtEmail))
-      .unique();
-
-    if (existing && existing.verifiedAt !== undefined) {
-      if (resume) await ctx.storage.delete(resume);
-      return "exists";
-    }
-
-    if (existing) {
-      if (existing.resumeStorageId && resume) {
-        await ctx.storage.delete(existing.resumeStorageId);
-      }
-      await ctx.db.replace(existing._id, {
-        ...member,
-        role: existing.role,
-        resumeStorageId: resume ?? existing.resumeStorageId,
-      });
-      const previous = await ctx.db
-        .query("demographics")
-        .withIndex("by_member", (q) => q.eq("memberId", existing._id))
-        .unique();
-      if (previous) await ctx.db.delete(previous._id);
-      await ctx.db.insert("demographics", { ...demographics, memberId: existing._id });
-      return "saved";
-    }
-
-    const memberId: Id<"members"> = await ctx.db.insert("members", {
-      ...member,
-      role: "member",
-      resumeStorageId: resume,
-    });
-    await ctx.db.insert("demographics", { ...demographics, memberId });
-    return "saved";
-  },
-});
-
-/** Deletes expired uploads and their files, returning how many it removed. */
-export const sweepUnclaimedResumes = internalMutation({
-  args: {},
-  returns: v.number(),
-  handler: async (ctx) => {
-    const stale = await ctx.db
-      .query("resumeUploads")
-      .withIndex("by_expiresAt", (q) => q.lt("expiresAt", Date.now()))
-      .take(RESUME_SWEEP_BATCH);
-
-    for (const upload of stale) {
-      await ctx.storage.delete(upload.storageId);
-      await ctx.db.delete(upload._id);
-    }
-    return stale.length;
-  },
-});
-
-/** Validates a registration, saves it, and emails a sign in link. */
-export const register = action({
-  args: submission,
-  returns: outcome,
-  handler: async (ctx, args): Promise<Outcome> => {
-    const gtEmail = normalizeEmail(args.gtEmail);
-
-    if (!isGeorgiaTechEmail(gtEmail)) {
-      throw new ConvexError("Enter a Georgia Tech email address.");
-    }
-    if (normalizeEmail(args.personalEmail) === gtEmail) {
-      throw new ConvexError("Use a personal email other than your Georgia Tech address.");
-    }
-    if (!isPhone(args.phone)) {
-      throw new ConvexError("Enter a valid phone number.");
-    }
+export const saveStudies = mutation({
+  args: studiesFields,
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    withinLimit(args);
+    const major = required(args.major, "Choose your major.");
     if (!isGraduationYearAllowed(args.graduationYear)) {
       throw new ConvexError("Choose a graduation year within four years of today.");
     }
 
-    const result: Outcome = await ctx.runMutation(internal.members.saveSubmission, {
-      ...args,
-      gtEmail,
+    const { member } = await ownRow(ctx);
+    await ctx.db.patch(member._id, {
+      studies: { ...args, major, minor: args.minor?.trim() || undefined },
+      step: Math.max(member.step, 3),
     });
+    return null;
+  },
+});
 
-    const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
-    await auth.api.signInMagicLink({
-      body: {
-        email: gtEmail,
-        name: `${args.firstName} ${args.lastName}`.trim(),
-        callbackURL: "/portal",
+export const saveMaterials = mutation({
+  args: materialsFields,
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    withinLimit(args);
+    const linkedin = profileLink(args.linkedin, "Enter a valid LinkedIn link.");
+    const github = profileLink(args.github, "Enter a valid GitHub link.");
+
+    const { member } = await ownRow(ctx);
+    if (args.resumeBook && !member.resume) {
+      throw new ConvexError("Upload a resume to join the resume book.");
+    }
+
+    await ctx.db.patch(member._id, {
+      materials: { linkedin, github, resumeBook: args.resumeBook },
+      step: Math.max(member.step, 4),
+    });
+    return null;
+  },
+});
+
+export const saveDemographics = mutation({
+  args: demographicAnswers,
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    if (args.raceEthnicity.length === 0) {
+      throw new ConvexError("Choose at least one answer for race and ethnicity.");
+    }
+    const raceEthnicity = args.raceEthnicity.includes("prefer_not_to_answer")
+      ? ["prefer_not_to_answer" as const]
+      : [...new Set(args.raceEthnicity)];
+
+    const { member } = await ownRow(ctx);
+    const answers = { ...args, raceEthnicity, memberId: member._id };
+    const existing = await findDemographics(ctx, member._id);
+
+    if (existing) await ctx.db.replace(existing._id, answers);
+    else await ctx.db.insert("demographics", answers);
+
+    await ctx.db.patch(member._id, { step: Math.max(member.step, 5) });
+    return null;
+  },
+});
+
+export const saveInterests = mutation({
+  args: interestFields,
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { member } = await ownRow(ctx);
+    await ctx.db.patch(member._id, {
+      interests: {
+        lookingFor: [...new Set(args.lookingFor)],
+        hobbies: [...new Set(args.hobbies)],
       },
-      headers,
+      step: Math.max(member.step, 6),
     });
+    return null;
+  },
+});
 
-    return result;
+export const skip = mutation({
+  args: { step: skippable },
+  returns: v.null(),
+  handler: async (ctx, { step }) => {
+    const { member } = await ownRow(ctx);
+    await ctx.db.patch(member._id, { step: Math.max(member.step, step) });
+    return null;
+  },
+});
+
+export const completeTask = mutation({
+  args: { task },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { member } = await ownRow(ctx);
+    if (!member.tasksDone.includes(args.task)) {
+      await ctx.db.patch(member._id, { tasksDone: [...member.tasksDone, args.task] });
+    }
+    return null;
+  },
+});
+
+export const setResume = internalMutation({
+  args: { userId: v.string(), storageId: v.id("_storage"), name: v.string(), size: v.number() },
+  returns: v.boolean(),
+  handler: async (ctx, { userId, ...resume }) => {
+    const member = await findMember(ctx, userId);
+    if (!member) return false;
+
+    if (member.resume) await ctx.storage.delete(member.resume.storageId);
+    await ctx.db.patch(member._id, { resume });
+    return true;
   },
 });

@@ -1,15 +1,14 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
-export const role = v.union(v.literal("member"), v.literal("board"), v.literal("admin"));
-
-export const classification = v.union(
+export const classStanding = v.union(
   v.literal("first_year"),
   v.literal("second_year"),
   v.literal("third_year"),
   v.literal("fourth_year"),
   v.literal("fifth_year_plus"),
-  v.literal("graduate"),
+  v.literal("masters"),
+  v.literal("phd"),
 );
 
 export const season = v.union(
@@ -28,102 +27,121 @@ export const gpaRange = v.union(
   v.literal("not_applicable"),
 );
 
-export const affiliation = v.union(
-  v.literal("code_2040"),
-  v.literal("nsbe"),
-  v.literal("shpe"),
-  v.literal("mlt"),
-  v.literal("codepath"),
-);
-
-export const raceEthnicity = v.union(
-  v.literal("black"),
-  v.literal("hispanic"),
-  v.literal("native_american"),
+export const race = v.union(
+  v.literal("american_indian_or_alaska_native"),
   v.literal("asian"),
-  v.literal("middle_eastern"),
+  v.literal("black_or_african_american"),
+  v.literal("hispanic_or_latino"),
+  v.literal("middle_eastern_or_north_african"),
+  v.literal("native_hawaiian_or_pacific_islander"),
   v.literal("white"),
-  v.literal("other"),
-  v.literal("prefer_not_to_say"),
+  v.literal("prefer_not_to_answer"),
 );
 
 export const gender = v.union(
-  v.literal("cis_man"),
-  v.literal("cis_woman"),
-  v.literal("trans_man"),
-  v.literal("trans_woman"),
-  v.literal("nonbinary"),
-  v.literal("other"),
-  v.literal("prefer_not_to_say"),
+  v.literal("male"),
+  v.literal("female"),
+  v.literal("non_binary"),
+  v.literal("prefer_not_to_answer"),
 );
 
-export const yesNoPreferNotToSay = v.union(
-  v.literal("yes"),
-  v.literal("no"),
-  v.literal("prefer_not_to_say"),
+export const yesNo = v.union(v.literal("yes"), v.literal("no"), v.literal("prefer_not_to_answer"));
+
+export const lookingFor = v.union(
+  v.literal("recruiting"),
+  v.literal("interview_prep"),
+  v.literal("academic_help"),
+  v.literal("career_exploration"),
+  v.literal("social_activities"),
+  v.literal("building_projects"),
+  v.literal("mentorship"),
+  v.literal("hackathons"),
 );
 
-/** Everything the registration form collects about the member. */
-export const registrationFields = {
+export const hobby = v.union(
+  v.literal("baking"),
+  v.literal("board_games"),
+  v.literal("video_games"),
+  v.literal("sports"),
+  v.literal("yoga"),
+  v.literal("hiking"),
+  v.literal("running"),
+  v.literal("dancing"),
+  v.literal("singing"),
+  v.literal("drawing"),
+  v.literal("reading"),
+  v.literal("volunteering"),
+);
+
+export const task = v.union(
+  v.literal("engage"),
+  v.literal("national"),
+  v.literal("whatsapp"),
+  v.literal("instagram"),
+);
+
+export const nameFields = {
   firstName: v.string(),
   lastName: v.string(),
-  /** Lowercased and trimmed before it is written or compared. */
-  gtEmail: v.string(),
-  personalEmail: v.string(),
   pronouns: v.string(),
+};
+
+export const contactFields = {
+  personalEmail: v.string(),
   phone: v.string(),
-  classification,
+};
+
+export const studiesFields = {
+  classStanding,
+  major: v.string(),
+  minor: v.optional(v.string()),
   graduationSeason: season,
   graduationYear: v.number(),
   gpa: gpaRange,
-  major: v.string(),
-  minor: v.optional(v.string()),
-  affiliations: v.array(affiliation),
-  linkedin: v.optional(v.string()),
-  github: v.optional(v.string()),
-  interests: v.array(v.string()),
-  socialEvents: v.array(v.string()),
-  nationalMember: v.boolean(),
-  engageJoined: v.boolean(),
-  instagramFollowed: v.boolean(),
-  whatsappJoined: v.boolean(),
 };
 
-/** Set by the chapter and the auth flow, never by the registration form. */
-export const memberFields = {
-  ...registrationFields,
-  /** Absent until the first magic link click, which is when Better Auth creates the user. */
-  userId: v.optional(v.string()),
-  role,
-  /** Absent means the sign up was never confirmed. */
-  verifiedAt: v.optional(v.number()),
-  resumeStorageId: v.optional(v.id("_storage")),
+export const materialsFields = {
+  linkedin: v.optional(v.string()),
+  github: v.optional(v.string()),
+  resumeBook: v.boolean(),
 };
 
 export const demographicAnswers = {
-  raceEthnicity,
+  raceEthnicity: v.array(race),
   gender,
-  firstGeneration: yesNoPreferNotToSay,
-  lowIncome: yesNoPreferNotToSay,
+  firstGeneration: yesNo,
+  lowIncome: yesNo,
+};
+
+export const interestFields = {
+  lookingFor: v.array(lookingFor),
+  hobbies: v.array(hobby),
 };
 
 export default defineSchema({
-  members: defineTable(memberFields)
-    .index("by_userId", ["userId"])
-    .index("by_gtEmail", ["gtEmail"])
-    .index("by_verifiedAt", ["verifiedAt"]),
-
-  resumeUploads: defineTable({
-    token: v.string(),
-    storageId: v.id("_storage"),
-    expiresAt: v.number(),
-  })
-    .index("by_token", ["token"])
-    .index("by_expiresAt", ["expiresAt"]),
+  members: defineTable({
+    userId: v.string(),
+    step: v.number(),
+    name: v.optional(v.object(nameFields)),
+    contact: v.optional(v.object(contactFields)),
+    studies: v.optional(v.object(studiesFields)),
+    materials: v.optional(v.object(materialsFields)),
+    interests: v.optional(v.object(interestFields)),
+    resume: v.optional(
+      v.object({ storageId: v.id("_storage"), name: v.string(), size: v.number() }),
+    ),
+    tasksDone: v.array(task),
+  }).index("by_userId", ["userId"]),
 
   /** Separate from members so no ordinary member query can return it. */
   demographics: defineTable({
     ...demographicAnswers,
     memberId: v.id("members"),
   }).index("by_member", ["memberId"]),
+
+  roster: defineTable({ email: v.string() }).index("by_email", ["email"]),
+
+  audits: defineTable({ exportedAt: v.number(), emails: v.number() }).index("by_exportedAt", [
+    "exportedAt",
+  ]),
 });

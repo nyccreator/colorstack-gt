@@ -15,14 +15,16 @@ function cors(origin: string | null): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": origin === siteUrl ? origin : siteUrl,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type",
     Vary: "Origin",
   };
 }
 
-/** Stores a resume and returns a token a registration can later claim it with. */
 const uploadResume = httpAction(async (ctx, request) => {
   const headers = cors(request.headers.get("Origin"));
+
+  const user = await authComponent.safeGetAuthUser(ctx);
+  if (!user) return new Response("Sign in to continue.", { status: 401, headers });
 
   if (request.headers.get("Content-Type") !== RESUME_CONTENT_TYPE) {
     return new Response("Upload a PDF.", { status: 415, headers });
@@ -38,17 +40,27 @@ const uploadResume = httpAction(async (ctx, request) => {
     return new Response("Keep the file under 5MB.", { status: 413, headers });
   }
 
+  const name =
+    (new URL(request.url).searchParams.get("name") ?? "").trim().slice(0, 120) || "resume.pdf";
   const storageId = await ctx.storage.store(blob);
-  const token = `${crypto.randomUUID()}${crypto.randomUUID()}`.replaceAll("-", "");
 
   try {
-    await ctx.runMutation(internal.members.recordUpload, { token, storageId });
+    const attached = await ctx.runMutation(internal.members.setResume, {
+      userId: user._id,
+      storageId,
+      name,
+      size: blob.size,
+    });
+    if (!attached) {
+      await ctx.storage.delete(storageId);
+      return new Response("Finish the earlier screens first.", { status: 409, headers });
+    }
   } catch (error) {
     await ctx.storage.delete(storageId);
     throw error;
   }
 
-  return Response.json({ token }, { headers });
+  return Response.json({ name, size: blob.size }, { headers });
 });
 
 http.route({
