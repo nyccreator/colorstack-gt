@@ -40,7 +40,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "icon", href: "/assets/colorstack-gt-dark.svg" },
+      { rel: "icon", href: "/assets/logos/colorstack-gt-dark.svg" },
     ],
   }),
 

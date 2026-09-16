@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 
 import { internalAction } from "./_generated/server";
+import { OTP_EXPIRY_SECONDS } from "./lib/config";
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
@@ -13,29 +14,27 @@ function isDevelopment(): boolean {
   }
 }
 
-const body = (url: string) =>
+const body = (code: string) =>
   [
-    "Click the link below to sign in to ColorStack at Georgia Tech.",
+    `Your ColorStack at Georgia Tech code is ${code}.`,
     "",
-    url,
-    "",
-    "The link expires in 15 minutes and works once.",
-    "If you did not ask for it, you can ignore this email.",
+    `Enter it on the page you asked for it from. It expires in ${OTP_EXPIRY_SECONDS / 60} minutes.`,
+    "If you did not ask for a code, you can ignore this email.",
   ].join("\n");
 
-export const sendMagicLink = internalAction({
-  args: { email: v.string(), url: v.string() },
-  handler: async (_ctx, { email, url }) => {
+export const sendCode = internalAction({
+  args: { email: v.string(), code: v.string() },
+  handler: async (_ctx, { email, code }) => {
     const apiKey = process.env.RESEND_API_KEY;
     const from = process.env.EMAIL_FROM;
 
     if (!apiKey || !from) {
       if (!isDevelopment()) {
         throw new Error(
-          `No mail provider configured on ${process.env.SITE_URL}. Set RESEND_API_KEY and EMAIL_FROM on this deployment; sign-in links are never written to its logs.`,
+          `No mail provider configured on ${process.env.SITE_URL}. Set RESEND_API_KEY and EMAIL_FROM on this deployment. Sign-in codes are never written to its logs.`,
         );
       }
-      console.info(`No mail provider configured. Magic link for ${email}: ${url}`);
+      console.info(`No mail provider configured. Sign-in code for ${email}: ${code}`);
       return;
     }
 
@@ -48,8 +47,8 @@ export const sendMagicLink = internalAction({
       body: JSON.stringify({
         from,
         to: email,
-        subject: "Your ColorStack at Georgia Tech sign-in link",
-        text: body(url),
+        subject: `${code} is your ColorStack at Georgia Tech code`,
+        text: body(code),
       }),
     });
 
