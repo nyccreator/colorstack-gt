@@ -602,6 +602,10 @@
 }
 
 @media (max-width: 900px), (max-width: 1100px) and (orientation: portrait) {
+  .landing {
+    scroll-snap-type: y mandatory;
+  }
+
   .lp-screen {
     height: auto;
   }
@@ -670,6 +674,10 @@
 
 @media (max-width: 900px) and (min-height: 980px),
   (max-width: 1100px) and (orientation: portrait) and (min-height: 980px) {
+  .landing {
+    scroll-snap-type: y proximity;
+  }
+
   .lp-screen {
     height: 100dvh;
   }
