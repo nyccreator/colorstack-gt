@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { Frame } from "@/components/frame";
 import { Footbar } from "@/components/onboarding/controls";
-import { STAGES, TASKS, THINGS } from "@/components/onboarding/options";
+import { STAGES, TASKS } from "@/components/onboarding/options";
 import { type Profile, SCREENS } from "@/components/onboarding/screens";
 import { doneTasks, TaskList } from "@/components/onboarding/tasks";
 
@@ -113,14 +113,16 @@ function Stages({
 
 function Done({ me, onHub }: { me: Profile; onHub: () => void }) {
   const done = doneTasks(me);
-  const left = TASKS.length - done.length;
+  const engage = TASKS.filter((task) => task.value === "engage");
+  const extras = TASKS.filter((task) => task.value !== "engage");
   return (
     <Frame signOut footer={<Footbar forward={{ label: "Go to my hub", onClick: onHub }} />}>
       <p className="mb-3 type-eyebrow text-diploma/52">Profile complete</p>
-      <h1 className="type-display text-step">
-        You're in.{left > 0 ? ` ${THINGS[left]} left.` : ""}
-      </h1>
-      <TaskList done={done} />
+      <h1 className="type-display text-step">You're in.</h1>
+      <p className="mt-3 mb-4 text-note text-diploma/72">Required to open your hub:</p>
+      <TaskList done={done} tasks={engage} />
+      <p className="mt-6 mb-4 text-note text-diploma/72">A few optional extras:</p>
+      <TaskList done={done} tasks={extras} />
     </Frame>
   );
 }

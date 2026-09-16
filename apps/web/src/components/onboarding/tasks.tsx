@@ -10,12 +10,18 @@ export function doneTasks(me: Profile): Task[] {
   ).map((task) => task.value);
 }
 
-export function TaskList({ done }: { done: readonly Task[] }) {
+export function TaskList({
+  done,
+  tasks = TASKS,
+}: {
+  done: readonly Task[];
+  tasks?: readonly (typeof TASKS)[number][];
+}) {
   const complete = useMutation(api.members.completeTask);
 
   return (
     <ol className="mt-1.5 max-w-150">
-      {TASKS.map((task, index) => {
+      {tasks.map((task, index) => {
         const isDone = done.includes(task.value);
         return (
           <li
@@ -29,23 +35,21 @@ export function TaskList({ done }: { done: readonly Task[] }) {
               <h2 className="type-heading text-item-title">{task.title}</h2>
               <p className="mt-0.75 text-hint text-diploma/52">{task.detail}</p>
             </div>
-            {isDone ? (
-              <span className="flex-none bg-diploma/10 px-3.25 py-2.5 type-label text-diploma/52">
-                Done
-              </span>
-            ) : (
-              <a
-                href={task.href}
-                target="_blank"
-                rel="noreferrer"
-                onClick={() => {
-                  if (task.value !== "engage") void complete({ task: task.value });
-                }}
-                className="flex-none px-3.25 py-2.5 type-label text-diploma inset-ring inset-ring-diploma/22 hover:text-burdell"
-              >
-                Open →
-              </a>
-            )}
+            <a
+              href={task.href}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => {
+                if (!isDone && task.value !== "engage") void complete({ task: task.value });
+              }}
+              className={`flex-none px-3.25 py-2.5 type-label hover:text-burdell ${
+                isDone
+                  ? "bg-diploma/10 text-diploma/52"
+                  : "text-diploma inset-ring inset-ring-diploma/22"
+              }`}
+            >
+              {isDone ? "Done →" : "Open →"}
+            </a>
           </li>
         );
       })}

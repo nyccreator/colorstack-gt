@@ -127,5 +127,3 @@ export const TASKS = [
     href: "https://www.instagram.com/colorstackgt/",
   },
 ] as const satisfies readonly { value: Task; title: string; detail: string; href: string }[];
-
-export const THINGS = ["No things", "One thing", "Two things", "Three things", "Four things"];

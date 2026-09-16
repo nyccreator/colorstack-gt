@@ -3,7 +3,7 @@ import { createFileRoute, Navigate, redirect } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 
 import { Frame } from "@/components/frame";
-import { TASKS, THINGS } from "@/components/onboarding/options";
+import { TASKS } from "@/components/onboarding/options";
 import { doneTasks, TaskList } from "@/components/onboarding/tasks";
 
 export const Route = createFileRoute("/hub")({
@@ -53,20 +53,14 @@ function Hub() {
   }
 
   const done = doneTasks(me);
-  const left = TASKS.length - done.length;
+  const extras = TASKS.filter((task) => task.value !== "engage");
 
   return (
     <Frame signOut>
       <p className="mb-3 type-eyebrow text-diploma/52">Your hub</p>
       <h1 className="type-display text-step">Hi, {me.name?.firstName}.</h1>
-      {left > 0 ? (
-        <>
-          <p className="mt-3 mb-4 text-note text-diploma/72">{THINGS[left]} left to set up.</p>
-          <TaskList done={done} />
-        </>
-      ) : (
-        <p className="mt-3 text-note text-diploma/72">You're all set.</p>
-      )}
+      <p className="mt-3 mb-4 text-note text-diploma/72">You're all set. A few optional extras:</p>
+      <TaskList done={done} tasks={extras} />
     </Frame>
   );
 }
