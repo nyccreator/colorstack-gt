@@ -37,7 +37,7 @@ function Hub() {
           href={ENGAGE.href}
           target="_blank"
           rel="noreferrer"
-          className="mt-5.5 inline-block bg-buzz px-5.5 py-3.5 type-button text-navy"
+          className="mt-5.5 inline-flex h-control items-center bg-buzz px-5.5 type-button text-navy"
         >
           Join on Engage
         </a>

@@ -28,6 +28,17 @@ const COPY = {
 
 const TRIES = ["no tries", "one try", "two tries", "three tries"];
 
+export const WRONG_DOMAIN =
+  "Membership is for Georgia Tech students. Please use your @gatech.edu address.";
+
+export async function sendCode(email: string): Promise<string | null> {
+  const { error } = await authClient.emailOtp.sendVerificationOtp({ email, type: "sign-in" });
+  if (!error) return null;
+  return error.status === 429
+    ? "Too many requests. Wait a minute and try again."
+    : "We couldn't send a code. Try again.";
+}
+
 const linkClass = "border-b border-buzz/40 text-buzz hover:text-burdell";
 
 function Heading({ eyebrow, title, lede }: { eyebrow: string; title: string; lede: ReactNode }) {
@@ -65,18 +76,11 @@ function EmailStep({
 
     setPending(true);
     const address = normalizeEmail(email);
-    const { error } = await authClient.emailOtp.sendVerificationOtp({
-      email: address,
-      type: "sign-in",
-    });
+    const failure = await sendCode(address);
     setPending(false);
 
-    if (error) {
-      setError(
-        error.status === 429
-          ? "Too many requests. Wait a minute and try again."
-          : "We couldn't send a code. Try again.",
-      );
+    if (failure) {
+      setError(failure);
       return;
     }
     onSent(address);
@@ -108,12 +112,12 @@ function EmailStep({
           }}
           aria-invalid={wrongDomain || undefined}
           aria-describedby={wrongDomain ? "gate-email-error" : undefined}
-          className="min-w-0 flex-1 border-r-0 px-3.5 py-4 text-note"
+          className="min-w-0 flex-1 border-r-0 px-3.5 text-note pointer-coarse:text-base"
         />
         <button
           type="submit"
           disabled={pending || wrongDomain}
-          className="flex-none cursor-pointer bg-buzz px-5.5 py-4 type-button text-navy disabled:cursor-default disabled:bg-diploma/16 disabled:text-diploma/52"
+          className="h-control flex-none cursor-pointer bg-buzz px-5.5 type-button text-navy disabled:cursor-default disabled:bg-diploma/16 disabled:text-diploma/52"
         >
           {pending ? "Sending" : "Send code"}
         </button>
@@ -121,7 +125,7 @@ function EmailStep({
 
       {wrongDomain ? (
         <Message tone="error" id="gate-email-error">
-          Membership is for Georgia Tech students, so please use your @gatech.edu address.
+          {WRONG_DOMAIN}
         </Message>
       ) : null}
       {error ? <Message tone="error">{error}</Message> : null}
@@ -192,13 +196,9 @@ function CodeStep({ email, onChangeEmail }: { email: string; onChangeEmail: () =
 
   async function resend() {
     setError(null);
-    const { error } = await authClient.emailOtp.sendVerificationOtp({ email, type: "sign-in" });
-    if (error) {
-      setError(
-        error.status === 429
-          ? "Too many requests. Wait a minute and try again."
-          : "We couldn't send a code. Try again.",
-      );
+    const failure = await sendCode(email);
+    if (failure) {
+      setError(failure);
       return;
     }
     setRetired(null);
@@ -228,14 +228,14 @@ function CodeStep({ email, onChangeEmail }: { email: string; onChangeEmail: () =
         <button
           type="button"
           onClick={resend}
-          className="mt-5.5 block w-full max-w-field cursor-pointer bg-buzz p-4.25 text-center type-button text-navy"
+          className="mt-5.5 flex h-control w-full max-w-field cursor-pointer items-center justify-center bg-buzz px-5.5 type-button text-navy"
         >
           Send a new code
         </button>
         <button
           type="button"
           onClick={onChangeEmail}
-          className="mt-2.75 block w-full max-w-field cursor-pointer p-4.25 text-center type-button text-diploma inset-ring inset-ring-diploma/22 hover:text-burdell"
+          className="mt-2.75 flex h-control w-full max-w-field cursor-pointer items-center justify-center px-5.5 type-button text-diploma inset-ring inset-ring-diploma/22 hover:text-burdell"
         >
           Use a different address
         </button>
@@ -266,7 +266,6 @@ function CodeStep({ email, onChangeEmail }: { email: string; onChangeEmail: () =
           disabled={pending}
           inputMode="numeric"
           autoComplete="one-time-code"
-          maxLength={OTP_LENGTH}
           aria-label={`${OTP_LENGTH}-digit code`}
           aria-invalid={wrong || undefined}
           aria-describedby="code-message"
@@ -278,7 +277,7 @@ function CodeStep({ email, onChangeEmail }: { email: string; onChangeEmail: () =
             setWrong(false);
             if (digits.length === OTP_LENGTH) void verify(digits);
           }}
-          className="absolute inset-0 z-10 h-full cursor-text p-0 text-base opacity-0"
+          className="absolute inset-0 z-10 h-full cursor-text border-transparent bg-transparent p-0 text-base text-transparent caret-transparent selection:bg-transparent focus-visible:outline-none"
         />
         <div aria-hidden className="flex gap-3">
           {Array.from({ length: OTP_LENGTH }, (_, index) => (
@@ -310,20 +309,18 @@ function CodeStep({ email, onChangeEmail }: { email: string; onChangeEmail: () =
       </div>
 
       <p className="mt-4 max-w-[44ch] text-note text-diploma/52">
-        {resent ? (
-          "If it hasn't arrived, check your Junk folder."
-        ) : (
+        {resent ? "If it hasn't arrived, check your Junk folder." : "Didn't arrive?"}{" "}
+        {cooldown > 0 ? null : (
           <>
-            Didn't arrive?{" "}
             <button type="button" onClick={resend} className={`cursor-pointer ${linkClass}`}>
               Resend
             </button>{" "}
             ·{" "}
-            <button type="button" onClick={onChangeEmail} className={`cursor-pointer ${linkClass}`}>
-              Use a different address
-            </button>
           </>
         )}
+        <button type="button" onClick={onChangeEmail} className={`cursor-pointer ${linkClass}`}>
+          Use a different address
+        </button>
       </p>
     </>
   );
@@ -332,12 +329,16 @@ function CodeStep({ email, onChangeEmail }: { email: string; onChangeEmail: () =
 export function Gate({
   variant,
   email: initial = "",
+  sent = false,
 }: {
   variant: keyof typeof COPY;
   email?: string;
+  sent?: boolean;
 }) {
   const [email, setEmail] = useState(initial);
-  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [sentTo, setSentTo] = useState<string | null>(
+    sent && isGeorgiaTechEmail(initial) ? normalizeEmail(initial) : null,
+  );
 
   return (
     <Frame>

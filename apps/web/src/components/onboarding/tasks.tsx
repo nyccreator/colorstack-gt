@@ -10,11 +10,26 @@ export function doneTasks(me: Profile): Task[] {
   ).map((task) => task.value);
 }
 
+export function pendingTasks(me: Profile): Task[] {
+  const done = doneTasks(me);
+  return me.tasksDone.filter((task) => !done.includes(task));
+}
+
+const LINK_STYLE = {
+  open: "text-diploma inset-ring inset-ring-diploma/22",
+  pending: "text-burdell inset-ring inset-ring-burdell/40",
+  done: "bg-diploma/10 text-diploma/52",
+} as const;
+
+const LINK_LABEL = { open: "Open →", pending: "In progress →", done: "Done →" } as const;
+
 export function TaskList({
   done,
+  pending = [],
   tasks = TASKS,
 }: {
   done: readonly Task[];
+  pending?: readonly Task[];
   tasks?: readonly (typeof TASKS)[number][];
 }) {
   const complete = useMutation(api.members.completeTask);
@@ -23,6 +38,7 @@ export function TaskList({
     <ol className="mt-1.5 max-w-150">
       {tasks.map((task, index) => {
         const isDone = done.includes(task.value);
+        const state = isDone ? "done" : pending.includes(task.value) ? "pending" : "open";
         return (
           <li
             key={task.value}
@@ -40,15 +56,11 @@ export function TaskList({
               target="_blank"
               rel="noreferrer"
               onClick={() => {
-                if (!isDone && task.value !== "engage") void complete({ task: task.value });
+                if (!isDone) void complete({ task: task.value });
               }}
-              className={`flex-none px-3.25 py-2.5 type-label hover:text-burdell ${
-                isDone
-                  ? "bg-diploma/10 text-diploma/52"
-                  : "text-diploma inset-ring inset-ring-diploma/22"
-              }`}
+              className={`inline-flex h-control-sm flex-none items-center px-3.5 type-label hover:text-burdell pointer-coarse:h-control-touch ${LINK_STYLE[state]}`}
             >
-              {isDone ? "Done →" : "Open →"}
+              {LINK_LABEL[state]}
             </a>
           </li>
         );

@@ -117,7 +117,7 @@ export function Chips<T extends string>({
             type="button"
             aria-pressed={on}
             onClick={() => onToggle(option.value)}
-            className={`cursor-pointer px-3 py-2 font-mono text-button pointer-coarse:px-3.75 pointer-coarse:py-3.5 ${
+            className={`inline-flex min-h-control-sm cursor-pointer items-center px-3.5 py-1.5 font-mono text-button pointer-coarse:min-h-control-touch ${
               on
                 ? "bg-diploma text-navy"
                 : option.value === quiet
@@ -133,7 +133,7 @@ export function Chips<T extends string>({
   );
 }
 
-const buttonClass = "cursor-pointer px-5.5 py-3.5 type-button";
+const buttonClass = "inline-flex h-control cursor-pointer items-center px-5.5 type-button";
 
 export function Footbar({
   step,

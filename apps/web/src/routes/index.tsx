@@ -1,7 +1,10 @@
+import { isGeorgiaTechEmail, normalizeEmail } from "@colorstack-gt/backend/convex/lib/identity";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { type CSSProperties, useState } from "react";
+import { type CSSProperties, type FormEvent, useState } from "react";
 
+import { sendCode, WRONG_DOMAIN } from "@/components/gate";
 import { Mark } from "@/components/mark";
+import { Message } from "@/components/message";
 
 export const Route = createFileRoute("/")({
   component: Landing,
@@ -79,31 +82,58 @@ const OFFERS = [
 function JoinField({ id }: { id: string }) {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!isGeorgiaTechEmail(email)) {
+      setError(WRONG_DOMAIN);
+      return;
+    }
+
+    setPending(true);
+    const address = normalizeEmail(email);
+    const failure = await sendCode(address);
+    setPending(false);
+
+    if (failure) {
+      setError(failure);
+      return;
+    }
+    void navigate({ to: "/join", search: { email: address, sent: true } });
+  }
 
   return (
-    <form
-      className="lp-field"
-      onSubmit={(event) => {
-        event.preventDefault();
-        void navigate({ to: "/join", search: { email: email.trim() || undefined } });
-      }}
-    >
-      <label htmlFor={id} className="sr-only">
-        Email address
-      </label>
-      <input
-        id={id}
-        type="email"
-        inputMode="email"
-        autoComplete="email"
-        placeholder="you@gatech.edu"
-        value={email}
-        onChange={(event) => setEmail(event.target.value)}
-      />
-      <button type="submit" className="type-button">
-        Join
-      </button>
-    </form>
+    <>
+      <form className="lp-field" onSubmit={submit} noValidate>
+        <label htmlFor={id} className="sr-only">
+          Email address
+        </label>
+        <input
+          id={id}
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+          placeholder="you@gatech.edu"
+          value={email}
+          onChange={(event) => {
+            setEmail(event.target.value);
+            setError(null);
+          }}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? `${id}-error` : undefined}
+        />
+        <button type="submit" disabled={pending} className="type-button">
+          {pending ? "Sending" : "Join"}
+        </button>
+      </form>
+      {error ? (
+        <Message tone="error" id={`${id}-error`}>
+          {error}
+        </Message>
+      ) : null}
+    </>
   );
 }
 

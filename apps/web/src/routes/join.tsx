@@ -5,6 +5,7 @@ import { Gate } from "@/components/gate";
 
 const searchSchema = z.object({
   email: z.string().optional().catch(undefined),
+  sent: z.boolean().optional().catch(undefined),
 });
 
 export const Route = createFileRoute("/join")({
@@ -16,6 +17,6 @@ export const Route = createFileRoute("/join")({
 });
 
 function Join() {
-  const { email } = Route.useSearch();
-  return <Gate variant="join" email={email} />;
+  const { email, sent } = Route.useSearch();
+  return <Gate variant="join" email={email} sent={sent} />;
 }
