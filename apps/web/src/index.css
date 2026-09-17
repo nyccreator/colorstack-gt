@@ -87,6 +87,9 @@
   /* Layout */
   --spacing-page: calc(3.667% + 14px);
   --spacing-nav: 70px;
+  --spacing-control: 46px;
+  --spacing-control-sm: 38px;
+  --spacing-control-touch: 44px;
   --container-field: 430px;
   --container-form: 560px;
   --container-column: 640px;
@@ -185,7 +188,8 @@
     color: var(--color-diploma);
     font-family: var(--font-mono);
     font-size: var(--text-control);
-    padding: 12px 14px;
+    height: var(--spacing-control);
+    padding: 0 14px;
   }
 
   ::placeholder {
@@ -295,8 +299,8 @@
 .lp-ghost {
   display: inline-flex;
   align-items: center;
-  height: 38px;
-  padding: 0 20px;
+  height: var(--spacing-control-sm);
+  padding: 0 14px;
   font-family: var(--font-mono);
   font-size: var(--text-button);
   letter-spacing: var(--tracking-mono);
@@ -398,14 +402,16 @@
 .lp-field input {
   flex: 1 1 60px;
   min-width: 0;
-  padding: 14px 13px;
+  height: var(--spacing-control);
+  padding: 0 14px;
   border-right: 0;
-  font-size: 12px;
+  font-size: var(--text-control);
 }
 
 .lp-field button {
   flex: none;
-  padding: 14px 18px;
+  height: var(--spacing-control);
+  padding: 0 22px;
   background: var(--color-buzz);
   color: var(--color-navy);
   cursor: pointer;
@@ -855,11 +861,12 @@
     padding: 13px 0;
   }
 
-  .lp-field button {
-    padding: 16px 20px;
+  .lp-cta,
+  .lp-ghost {
+    height: var(--spacing-control-touch);
   }
 
   .lp-field input {
-    padding: 16px 13px;
+    font-size: 16px;
   }
 }

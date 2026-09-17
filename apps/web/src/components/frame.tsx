@@ -29,7 +29,7 @@ function SignOut() {
         type="button"
         onClick={signOut}
         disabled={pending}
-        className="flex h-11.5 flex-none cursor-pointer items-center px-5 type-button text-diploma inset-ring inset-ring-diploma/22 hover:text-burdell disabled:cursor-wait"
+        className="flex h-control flex-none cursor-pointer items-center px-5.5 type-button text-diploma inset-ring inset-ring-diploma/22 hover:text-burdell disabled:cursor-wait"
       >
         {pending ? "Signing out" : "Sign out"}
       </button>
@@ -60,7 +60,7 @@ export function Frame({
 
       {signOut ? <SignOut /> : null}
 
-      <div className="mx-auto grid w-full max-w-420 flex-1 lg:h-full lg:grid-cols-[minmax(0,1fr)_34%]">
+      <div className="mx-auto grid w-full max-w-420 flex-1 grid-cols-1 lg:h-full lg:grid-cols-[minmax(0,1fr)_34%]">
         <div className="flex flex-col items-center px-page pt-26 pb-10 lg:overflow-y-auto lg:pt-18">
           <div className="my-auto w-full max-w-column">{children}</div>
           {footer ? <div className="w-full max-w-column pt-6.5">{footer}</div> : null}

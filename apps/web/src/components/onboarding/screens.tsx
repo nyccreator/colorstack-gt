@@ -109,7 +109,7 @@ function Screen({
 
 function Locked({ value, badge }: { value: string; badge: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 border border-diploma/22 bg-diploma/4 px-3.5 py-3 font-mono text-control text-diploma/72">
+    <div className="flex items-center justify-between gap-3 border border-diploma/22 bg-diploma/4 h-control px-3.5 font-mono text-control text-diploma/72">
       <span className="min-w-0 truncate">{value}</span>
       <span className="flex-none type-label text-burdell">{badge}</span>
     </div>
