@@ -8,7 +8,7 @@ import { Frame } from "@/components/frame";
 import { Footbar } from "@/components/onboarding/controls";
 import { STAGES, TASKS } from "@/components/onboarding/options";
 import { type Profile, SCREENS } from "@/components/onboarding/screens";
-import { doneTasks, TaskList } from "@/components/onboarding/tasks";
+import { doneTasks, pendingTasks, TaskList } from "@/components/onboarding/tasks";
 
 const searchSchema = z.object({
   gated: z.boolean().optional().catch(undefined),
@@ -115,12 +115,18 @@ function Done({ me, onHub }: { me: Profile; onHub: () => void }) {
   const done = doneTasks(me);
   const engage = TASKS.filter((task) => task.value === "engage");
   const extras = TASKS.filter((task) => task.value !== "engage");
+  const openedEngage = me.onRoster || me.tasksDone.includes("engage");
   return (
-    <Frame signOut footer={<Footbar forward={{ label: "Go to my hub", onClick: onHub }} />}>
+    <Frame
+      signOut
+      footer={
+        <Footbar forward={{ label: "Go to my hub", onClick: onHub, disabled: !openedEngage }} />
+      }
+    >
       <p className="mb-3 type-eyebrow text-diploma/52">Profile complete</p>
       <h1 className="type-display text-step">You're in.</h1>
       <p className="mt-3 mb-4 text-note text-diploma/72">Required to open your hub:</p>
-      <TaskList done={done} tasks={engage} />
+      <TaskList done={done} pending={pendingTasks(me)} tasks={engage} />
       <p className="mt-6 mb-4 text-note text-diploma/72">A few optional extras:</p>
       <TaskList done={done} tasks={extras} />
     </Frame>
