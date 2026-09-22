@@ -43,7 +43,7 @@ function Hub() {
         </a>
         <p className="mt-4 max-w-[48ch] text-note text-diploma/52">
           Already on the roster?{" "}
-          <a href="mailto:board@colorstackgt.org" className={linkClass}>
+          <a href="mailto:colorstackgt@gmail.com" className={linkClass}>
             Email the e-board
           </a>
           .
