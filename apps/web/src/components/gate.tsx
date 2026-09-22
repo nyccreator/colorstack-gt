@@ -6,12 +6,15 @@ import {
 } from "@colorstack-gt/backend/convex/lib/config";
 import { isGeorgiaTechEmail, normalizeEmail } from "@colorstack-gt/backend/convex/lib/identity";
 import { Link, useNavigate, useRouter } from "@tanstack/react-router";
-import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
 
 import { Frame } from "./frame";
+import { Heading } from "./heading";
+import { Mark } from "./mark";
 import { Message } from "./message";
+import { ghostButton, inlineLink, primaryButton } from "./onboarding/controls";
 
 const COPY = {
   "sign-in": {
@@ -37,18 +40,6 @@ export async function sendCode(email: string): Promise<string | null> {
   return error.status === 429
     ? "Too many requests. Wait a minute and try again."
     : "We couldn't send a code. Try again.";
-}
-
-const linkClass = "border-b border-buzz/40 text-buzz hover:text-burdell";
-
-function Heading({ eyebrow, title, lede }: { eyebrow: string; title: string; lede: ReactNode }) {
-  return (
-    <>
-      <p className="mb-3 type-eyebrow text-diploma/52">{eyebrow}</p>
-      <h1 className="type-display text-gate">{title}</h1>
-      <p className="mt-3.5 max-w-[44ch] text-lede-gate text-diploma/72">{lede}</p>
-    </>
-  );
 }
 
 function EmailStep({
@@ -94,7 +85,7 @@ function EmailStep({
         lede="We'll email you a six-digit code. You'll need your Georgia Tech address."
       />
 
-      <form onSubmit={submit} noValidate className="mt-6 flex max-w-field">
+      <form onSubmit={submit} noValidate className="mt-8 flex max-w-field flex-wrap gap-3.5">
         <label htmlFor="gate-email" className="sr-only">
           Georgia Tech email
         </label>
@@ -112,12 +103,12 @@ function EmailStep({
           }}
           aria-invalid={wrongDomain || undefined}
           aria-describedby={wrongDomain ? "gate-email-error" : undefined}
-          className="min-w-0 flex-1 border-r-0 px-3.5 text-note pointer-coarse:text-base"
+          className="min-w-55 flex-1"
         />
         <button
           type="submit"
           disabled={pending || wrongDomain}
-          className="h-control flex-none cursor-pointer bg-buzz px-5.5 type-button text-navy disabled:cursor-default disabled:bg-diploma/16 disabled:text-diploma/52"
+          className={`${primaryButton} max-shell:w-full`}
         >
           {pending ? "Sending" : "Send code"}
         </button>
@@ -130,11 +121,11 @@ function EmailStep({
       ) : null}
       {error ? <Message tone="error">{error}</Message> : null}
 
-      <p className="mt-4 max-w-[44ch] text-note text-diploma/52">
+      <p className="mt-7 max-w-[46ch] text-note text-diploma/86">
         {wrongDomain ? (
           <>
             Are you with a partner company?{" "}
-            <a href="mailto:colorstackgt@gmail.com" className={linkClass}>
+            <a href="mailto:colorstackgt@gmail.com" className={inlineLink}>
               Email the e-board
             </a>
             .
@@ -142,7 +133,7 @@ function EmailStep({
         ) : (
           <>
             {copy.prompt}{" "}
-            <Link to={copy.other.to} className={linkClass}>
+            <Link to={copy.other.to} className={inlineLink}>
               {copy.other.label}
             </Link>
             .
@@ -225,18 +216,10 @@ function CodeStep({ email, onChangeEmail }: { email: string; onChangeEmail: () =
             </>
           }
         />
-        <button
-          type="button"
-          onClick={resend}
-          className="mt-5.5 flex h-control w-full max-w-field cursor-pointer items-center justify-center bg-buzz px-5.5 type-button text-navy"
-        >
+        <button type="button" onClick={resend} className={`${primaryButton} mt-7`}>
           Send a new code
         </button>
-        <button
-          type="button"
-          onClick={onChangeEmail}
-          className="mt-2.75 flex h-control w-full max-w-field cursor-pointer items-center justify-center px-5.5 type-button text-diploma inset-ring inset-ring-diploma/22 hover:text-burdell"
-        >
+        <button type="button" onClick={onChangeEmail} className={`${ghostButton} mt-3.5 ml-3.5`}>
           Use a different address
         </button>
         {error ? <Message tone="error">{error}</Message> : null}
@@ -258,7 +241,7 @@ function CodeStep({ email, onChangeEmail }: { email: string; onChangeEmail: () =
         }
       />
 
-      <div className="relative mt-6 max-w-field">
+      <div className="relative mt-7 max-w-105">
         <input
           ref={input}
           autoFocus
@@ -279,13 +262,13 @@ function CodeStep({ email, onChangeEmail }: { email: string; onChangeEmail: () =
           }}
           className="absolute inset-0 z-10 h-full cursor-text border-transparent bg-transparent p-0 text-base text-transparent caret-transparent selection:bg-transparent focus-visible:outline-none"
         />
-        <div aria-hidden className="flex gap-3">
+        <div aria-hidden className="flex gap-[clamp(8px,1.1vw,14px)]">
           {Array.from({ length: OTP_LENGTH }, (_, index) => (
             <span
               key={index}
-              className={`flex aspect-3/4 flex-1 items-center justify-center border bg-diploma/9 font-mono text-code ${
-                wrong ? "border-azalea/60" : "border-diploma/22"
-              } ${code[index] ? "text-diploma" : "text-diploma/22"} ${
+              className={`flex aspect-4/5 flex-1 items-center justify-center rounded-[clamp(10px,1.2vw,16px)] border bg-navy/38 type-display text-code ${
+                wrong ? "border-azalea/70" : "border-diploma/26"
+              } ${code[index] ? "text-diploma" : "text-diploma/26"} ${
                 focused && !pending && index === current
                   ? "outline-2 outline-offset-3 outline-burdell"
                   : ""
@@ -308,17 +291,17 @@ function CodeStep({ email, onChangeEmail }: { email: string; onChangeEmail: () =
         {error ? <Message tone="error">{error}</Message> : null}
       </div>
 
-      <p className="mt-4 max-w-[44ch] text-note text-diploma/52">
+      <p className="mt-7 max-w-[46ch] text-note text-diploma/86">
         {resent ? "If it hasn't arrived, check your Junk folder." : "Didn't arrive?"}{" "}
         {cooldown > 0 ? null : (
           <>
-            <button type="button" onClick={resend} className={`cursor-pointer ${linkClass}`}>
+            <button type="button" onClick={resend} className={`cursor-pointer ${inlineLink}`}>
               Resend
             </button>{" "}
             ·{" "}
           </>
         )}
-        <button type="button" onClick={onChangeEmail} className={`cursor-pointer ${linkClass}`}>
+        <button type="button" onClick={onChangeEmail} className={`cursor-pointer ${inlineLink}`}>
           Use a different address
         </button>
       </p>
@@ -341,7 +324,14 @@ export function Gate({
   );
 
   return (
-    <Frame>
+    <Frame
+      art={
+        <Mark
+          mark={variant === "join" && !sentTo ? "wreck" : "buzz"}
+          className="w-[min(62%,26rem)] max-shell:w-[min(46%,13.75rem)]"
+        />
+      }
+    >
       {sentTo ? (
         <CodeStep email={sentTo} onChangeEmail={() => setSentTo(null)} />
       ) : (

@@ -2,9 +2,13 @@ import { api } from "@colorstack-gt/backend/convex/_generated/api";
 import { createFileRoute, Navigate, redirect } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 
-import { Frame } from "@/components/frame";
+import { Bar, Frame } from "@/components/frame";
+import { Heading } from "@/components/heading";
+import { Mark } from "@/components/mark";
+import { Marker } from "@/components/marker";
+import { inlineLink, primaryButton } from "@/components/onboarding/controls";
 import { TASKS } from "@/components/onboarding/options";
-import { doneTasks, TaskList } from "@/components/onboarding/tasks";
+import { doneTasks, muted, TaskLink } from "@/components/onboarding/tasks";
 
 export const Route = createFileRoute("/hub")({
   beforeLoad: ({ context }) => {
@@ -14,8 +18,9 @@ export const Route = createFileRoute("/hub")({
 });
 
 const ENGAGE = TASKS.find((task) => task.value === "engage")!;
+const EXTRAS = TASKS.filter((task) => task.value !== "engage");
 
-const linkClass = "border-b border-buzz/40 text-buzz hover:text-burdell";
+const GROUNDS = ["bg-navy text-diploma", "bg-diploma text-navy", "bg-burdell text-navy"] as const;
 
 function Hub() {
   const me = useQuery(api.members.me);
@@ -26,24 +31,23 @@ function Hub() {
 
   if (!me.onRoster) {
     return (
-      <Frame signOut>
-        <p className="mb-3 type-eyebrow text-diploma/52">One more step</p>
-        <h1 className="type-display text-step">Join us on Engage.</h1>
-        <p className="mt-3 max-w-[48ch] text-note text-diploma/72">
-          The hub opens once you're on our Engage roster. We check the roster by hand, so it can
-          take a little while after you join.
-        </p>
+      <Frame signOut art={<Mark mark="wreck" className="w-[min(62%,26rem)]" />}>
+        <Heading
+          eyebrow="One more step"
+          title="Join us on Engage."
+          lede="The hub opens once you're on our Engage roster. We check the roster by hand, so it can take a little while after you join."
+        />
         <a
           href={ENGAGE.href}
           target="_blank"
           rel="noreferrer"
-          className="mt-5.5 inline-flex h-control items-center bg-buzz px-5.5 type-button text-navy"
+          className={`${primaryButton} mt-8 self-start`}
         >
           Join on Engage
         </a>
-        <p className="mt-4 max-w-[48ch] text-note text-diploma/52">
+        <p className="mt-7 max-w-[46ch] text-note text-diploma/86">
           Already on the roster?{" "}
-          <a href="mailto:colorstackgt@gmail.com" className={linkClass}>
+          <a href="mailto:colorstackgt@gmail.com" className={inlineLink}>
             Email the e-board
           </a>
           .
@@ -53,14 +57,51 @@ function Hub() {
   }
 
   const done = doneTasks(me);
-  const extras = TASKS.filter((task) => task.value !== "engage");
 
   return (
-    <Frame signOut>
-      <p className="mb-3 type-eyebrow text-diploma/52">Your hub</p>
-      <h1 className="type-display text-step">Hi, {me.name?.firstName}.</h1>
-      <p className="mt-3 mb-4 text-note text-diploma/72">You're all set. A few optional extras:</p>
-      <TaskList done={done} tasks={extras} />
-    </Frame>
+    <div className="grid min-h-dvh grid-rows-[auto_auto] bg-blue-bright shell:grid-rows-[minmax(0,1fr)_minmax(0,0.9fr)]">
+      <Bar signOut />
+
+      <div className="flex flex-col justify-start px-edge pt-[calc(var(--spacing-bar)+clamp(28px,7vh,64px))] pb-[clamp(20px,4vh,44px)] shell:pt-anchor-low">
+        <div className="w-full max-w-column">
+          <Heading
+            eyebrow="Your hub"
+            title={`Hi, ${me.name?.firstName}.`}
+            lede="You're all set. A few optional extras:"
+          />
+        </div>
+      </div>
+
+      <ul className="grid min-h-0 grid-cols-1 shell:grid-cols-3">
+        {EXTRAS.map((task, index) => {
+          const isDone = done.includes(task.value);
+          const ground = GROUNDS[index] ?? GROUNDS[0];
+          const onInk = index > 0;
+
+          return (
+            <li
+              key={task.value}
+              className={`flex min-w-0 flex-col justify-between gap-4.5 p-[clamp(20px,2.6vw,34px)] first:pl-edge last:pr-edge max-shell:px-edge ${ground}`}
+            >
+              <div className="flex gap-3">
+                <span className="flex h-lh flex-none items-center text-item-title">
+                  <Marker state={isDone ? "done" : "todo"} onInk={onInk} />
+                </span>
+                <div className="min-w-0">
+                  <h2 className="type-heading text-item-title">{task.title}</h2>
+                  <p className={`mt-2 text-item ${muted(onInk)}`}>{task.detail}</p>
+                </div>
+              </div>
+              <TaskLink
+                task={task}
+                label={isDone ? "Open again →" : "Open →"}
+                onInk={onInk}
+                className="w-fit"
+              />
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

@@ -21,6 +21,7 @@ import { type ReactNode, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 
 import { Frame } from "../frame";
+import { Heading } from "../heading";
 import { Message } from "../message";
 import { Chips, Field, Footbar, Group, Select } from "./controls";
 import {
@@ -97,21 +98,38 @@ function Screen({
   return (
     <Frame
       signOut
+      anchor="high"
+      rail={<Rail index={index} />}
       footer={<Footbar step={index} total={STAGES.length} onBack={onBack} forward={forward} />}
     >
-      <p className="mb-3 type-eyebrow text-diploma/52">{STAGES[index]?.title}</p>
-      <h1 className="type-display text-step">{title}</h1>
+      <Heading eyebrow={STAGES[index]?.title} title={title} size="step" />
       {children}
       {error ? <Message tone="error">{error}</Message> : null}
     </Frame>
   );
 }
 
+export function Rail({ index }: { index: number }) {
+  return (
+    <>
+      <p aria-hidden className="type-display text-rail">
+        {String(index + 1).padStart(2, "0")}
+      </p>
+      <p aria-hidden className="mt-2.5 type-micro text-diploma/64">
+        of {String(STAGES.length).padStart(2, "0")}
+      </p>
+      <p aria-hidden className="mt-4 text-band-body text-burdell">
+        {STAGES[index]?.title}
+      </p>
+    </>
+  );
+}
+
 function Locked({ value, badge }: { value: string; badge: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 border border-diploma/22 bg-diploma/4 h-control px-3.5 font-mono text-control text-diploma/72">
+    <div className="flex h-control items-center justify-between gap-4 rounded-full border border-diploma/26 bg-diploma/10 px-[clamp(14px,1.6vw,22px)] text-control text-diploma">
       <span className="min-w-0 truncate">{value}</span>
-      <span className="flex-none type-label text-burdell">{badge}</span>
+      <span className="flex-none type-micro text-burdell">{badge}</span>
     </div>
   );
 }
@@ -490,7 +508,7 @@ function YourMaterials({ me, onBack, onNext }: ScreenProps) {
               badge={uploading ? "Uploading" : "Attached"}
             />
           ) : (
-            <span className="block border border-dashed border-diploma/22 p-4.5 text-center font-mono text-control text-diploma/52 hover:text-burdell">
+            <span className="flex h-[clamp(64px,9vh,82px)] items-center justify-center rounded-full border border-dashed border-diploma/26 text-note text-diploma/86 hover:border-burdell hover:text-burdell">
               {uploading ? "Uploading" : "Drop a PDF, or browse · 5MB max"}
             </span>
           )}
@@ -504,7 +522,7 @@ function YourMaterials({ me, onBack, onNext }: ScreenProps) {
         />
       </Field>
 
-      <label className="mt-3.5 flex max-w-form cursor-pointer items-start gap-2.75 has-disabled:cursor-not-allowed">
+      <label className="mt-6 flex max-w-form cursor-pointer items-start gap-3.5 has-disabled:cursor-not-allowed">
         <input
           type="checkbox"
           className="mt-0.5"
@@ -512,9 +530,8 @@ function YourMaterials({ me, onBack, onNext }: ScreenProps) {
           disabled={!hasResume}
           onChange={(event) => setResumeBook(event.target.checked)}
         />
-        <span className="text-note text-diploma/72">
-          Include me in the resume book our partner companies see. You can switch this off any time,
-          and switching it off pulls you from the next book we send.
+        <span className="text-note text-diploma/86">
+          Include me in the resume book our partner companies see. You can switch this off any time.
         </span>
       </label>
     </Screen>
@@ -580,11 +597,7 @@ function ReportForm({
           quiet="prefer_not_to_answer"
         />
       </Group>
-      <Group
-        id="first-generation"
-        label="First-generation college student"
-        hint="Neither parent or guardian completed a four-year degree."
-      >
+      <Group id="first-generation" label="First-generation college student">
         <Chips
           options={YES_NO}
           selected={firstGeneration ? [firstGeneration] : []}
@@ -592,7 +605,7 @@ function ReportForm({
           quiet="prefer_not_to_answer"
         />
       </Group>
-      <Group id="low-income" label="From a low-income background?">
+      <Group id="low-income" label="Low-income background">
         <Chips
           options={YES_NO}
           selected={lowIncome ? [lowIncome] : []}

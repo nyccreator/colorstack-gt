@@ -75,8 +75,8 @@ export const LOOKING_FOR = [
 
 export const HOBBIES = [
   { value: "baking", label: "Baking" },
-  { value: "board_games", label: "Board Games" },
-  { value: "video_games", label: "Video Games" },
+  { value: "board_games", label: "Board games" },
+  { value: "video_games", label: "Video games" },
   { value: "sports", label: "Sports" },
   { value: "yoga", label: "Yoga" },
   { value: "hiking", label: "Hiking" },
@@ -89,15 +89,12 @@ export const HOBBIES = [
 ] as const satisfies Options<Interests["hobbies"][number]>;
 
 export const STAGES = [
-  { title: "Who you are", detail: "Name and pronouns" },
-  { title: "How we reach you", detail: "Personal email and phone" },
-  { title: "You at Tech", detail: "Standing, major, graduation, GPA range" },
-  { title: "Your materials", detail: "LinkedIn, GitHub, resume" },
-  {
-    title: "The part we report",
-    detail: "Four questions, each with a prefer-not-to-answer option",
-  },
-  { title: "What you're here for", detail: "What you're looking for, hobbies" },
+  { title: "Who you are" },
+  { title: "How we reach you" },
+  { title: "Your studies" },
+  { title: "Your career" },
+  { title: "Your background" },
+  { title: "Your interests" },
 ] as const;
 
 export const TASKS = [

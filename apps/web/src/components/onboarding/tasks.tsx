@@ -1,8 +1,9 @@
 import { api } from "@colorstack-gt/backend/convex/_generated/api";
 import { useMutation } from "convex/react";
 
-import type { Profile } from "./screens";
+import { Marker } from "../marker";
 import { TASKS, type Task } from "./options";
+import type { Profile } from "./screens";
 
 export function doneTasks(me: Profile): Task[] {
   return TASKS.filter((task) =>
@@ -15,53 +16,82 @@ export function pendingTasks(me: Profile): Task[] {
   return me.tasksDone.filter((task) => !done.includes(task));
 }
 
-const LINK_STYLE = {
-  open: "text-diploma inset-ring inset-ring-diploma/22",
-  pending: "text-burdell inset-ring inset-ring-burdell/40",
-  done: "bg-diploma/10 text-diploma/52",
-} as const;
+const LINK_LABEL = { open: "Open →", pending: "In progress →", done: "Done" } as const;
 
-const LINK_LABEL = { open: "Open →", pending: "In progress →", done: "Done →" } as const;
+export const muted = (onInk?: boolean) => (onInk ? "text-navy/55" : "text-diploma/86");
+
+export function TaskLink({
+  task,
+  label,
+  onInk,
+  className = "",
+}: {
+  task: (typeof TASKS)[number];
+  label: string;
+  onInk?: boolean;
+  className?: string;
+}) {
+  const complete = useMutation(api.members.completeTask);
+
+  return (
+    <a
+      href={task.href}
+      target="_blank"
+      rel="noreferrer"
+      onClick={() => void complete({ task: task.value })}
+      className={`inline-flex h-control-sm items-center rounded-full border px-4.5 type-micro pointer-coarse:h-control-touch ${
+        onInk
+          ? "border-navy/55 text-navy hover:border-navy"
+          : "border-diploma/55 text-diploma hover:border-burdell hover:text-burdell"
+      } ${className}`}
+    >
+      {label}
+    </a>
+  );
+}
 
 export function TaskList({
   done,
   pending = [],
   tasks = TASKS,
+  required,
 }: {
   done: readonly Task[];
   pending?: readonly Task[];
   tasks?: readonly (typeof TASKS)[number][];
+  required?: boolean;
 }) {
-  const complete = useMutation(api.members.completeTask);
-
   return (
-    <ol className="mt-1.5 max-w-150">
-      {tasks.map((task, index) => {
+    <ol className="-mx-edge">
+      {tasks.map((task) => {
         const isDone = done.includes(task.value);
         const state = isDone ? "done" : pending.includes(task.value) ? "pending" : "open";
+        const onInk = Boolean(required);
+
         return (
           <li
             key={task.value}
-            className="flex items-start gap-3.5 border-t border-diploma/14 py-3.5 last:border-b"
+            className={`flex items-center gap-4.5 px-edge py-[clamp(16px,2.2vh,24px)] ${
+              required ? "bg-burdell text-navy" : ""
+            }`}
           >
-            <span className="mt-0.75 font-mono text-label text-gold">
-              {String(index + 1).padStart(2, "0")}
-            </span>
+            <Marker state={isDone ? "done" : state === "pending" ? "now" : "todo"} onInk={onInk} />
             <div className="min-w-0 flex-1">
-              <h2 className="type-heading text-item-title">{task.title}</h2>
-              <p className="mt-0.75 text-hint text-diploma/52">{task.detail}</p>
+              <h2 className="flex flex-wrap items-center gap-3 type-heading text-item-title">
+                {task.title}
+                {required ? (
+                  <span className="rounded-full bg-navy/14 px-2.75 py-1 type-micro text-navy">
+                    Required
+                  </span>
+                ) : null}
+              </h2>
+              <p className={`mt-1.25 text-item ${muted(onInk)}`}>{task.detail}</p>
             </div>
-            <a
-              href={task.href}
-              target="_blank"
-              rel="noreferrer"
-              onClick={() => {
-                if (!isDone) void complete({ task: task.value });
-              }}
-              className={`inline-flex h-control-sm flex-none items-center px-3.5 type-label hover:text-burdell pointer-coarse:h-control-touch ${LINK_STYLE[state]}`}
-            >
-              {LINK_LABEL[state]}
-            </a>
+            {isDone ? (
+              <span className={`flex-none type-micro ${muted(onInk)}`}>{LINK_LABEL.done}</span>
+            ) : (
+              <TaskLink task={task} label={LINK_LABEL[state]} onInk={onInk} className="flex-none" />
+            )}
           </li>
         );
       })}

@@ -13,7 +13,7 @@ export function Message({
     <p
       id={id}
       role={tone === "error" ? "alert" : "status"}
-      className={`mt-4 max-w-[44ch] border-l-2 pl-2.75 font-mono text-hint ${
+      className={`mt-5 max-w-[48ch] border-l-2 pl-3 text-note ${
         tone === "error" ? "border-azalea text-diploma" : "border-burdell text-burdell"
       }`}
     >
