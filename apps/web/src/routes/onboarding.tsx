@@ -5,6 +5,7 @@ import { useState } from "react";
 import { z } from "zod";
 
 import { Frame } from "@/components/frame";
+import { Marker } from "@/components/marker";
 import { Footbar } from "@/components/onboarding/controls";
 import { STAGES, TASKS } from "@/components/onboarding/options";
 import { type Profile, SCREENS } from "@/components/onboarding/screens";
@@ -36,14 +37,7 @@ function statuses(me: Profile): Status[] {
   ];
 }
 
-function detail(me: Profile, index: number): string {
-  if (index === 0 && me.name)
-    return `${me.name.firstName} ${me.name.lastName} · ${me.name.pronouns}`;
-  if (index === 1 && me.contact) return `${me.contact.personalEmail} · ${me.contact.phone}`;
-  return STAGES[index]?.detail ?? "";
-}
-
-const STATUS_LABEL = { done: "Done", skipped: "Skipped", todo: "—", next: "Next" } as const;
+const STATUS_LABEL = { done: "", skipped: "Optional", todo: "", next: "Next" } as const;
 
 function Stages({
   me,
@@ -61,6 +55,20 @@ function Stages({
   return (
     <Frame
       signOut
+      anchor="high"
+      rail={
+        <>
+          <p aria-hidden className="type-display text-rail">
+            {String(next + 1).padStart(2, "0")}
+          </p>
+          <p aria-hidden className="mt-2.5 type-micro text-diploma/64">
+            of {String(STAGES.length).padStart(2, "0")}
+          </p>
+          <p aria-hidden className="mt-4 text-band-body text-burdell">
+            {STAGES[next]?.title}
+          </p>
+        </>
+      }
       footer={
         <Footbar
           step={next}
@@ -72,37 +80,28 @@ function Stages({
         />
       }
     >
-      <p className="mb-3 type-eyebrow text-diploma/52">{gated ? "Not yet" : "Welcome back"}</p>
-      <h1 className="type-display text-step">
+      <p className="type-eyebrow text-diploma/86">{gated ? "Not yet" : "Welcome back"}</p>
+      <h1 className="mt-3.5 type-display text-step">
         {gated ? "A few things first." : "You left off partway."}
       </h1>
-      <ol className="mt-1.5 max-w-150">
+      <ol className="mt-8 grid max-w-150 gap-4.5">
         {STAGES.map((stage, index) => {
           const state =
             index === next && status[index] === "todo" ? "next" : (status[index] ?? "todo");
+          const label = STATUS_LABEL[state];
           return (
-            <li
-              key={stage.title}
-              className="flex items-baseline gap-3.5 border-t border-diploma/14 py-3 last:border-b"
-            >
-              <span className="w-4 flex-none font-mono text-label text-gold">
-                {String(index + 1).padStart(2, "0")}
-              </span>
-              <div className="min-w-0 flex-1">
-                <h2 className="type-heading text-stage">{stage.title}</h2>
-                <p className="mt-0.75 truncate text-hint text-diploma/52">{detail(me, index)}</p>
-              </div>
-              <span
-                className={`flex-none type-label ${
-                  state === "done"
-                    ? "text-diploma"
-                    : state === "next"
-                      ? "text-buzz"
-                      : "text-diploma/52"
-                }`}
-              >
-                {STATUS_LABEL[state]}
-              </span>
+            <li key={stage.title} className="flex items-center gap-4.5">
+              <Marker state={state === "done" ? "done" : state === "next" ? "now" : "todo"} />
+              <h2 className="min-w-0 flex-1 type-heading text-stage">{stage.title}</h2>
+              {label ? (
+                <span
+                  className={`flex-none type-micro ${
+                    state === "next" ? "text-burdell" : "text-diploma/86"
+                  }`}
+                >
+                  {label}
+                </span>
+              ) : null}
             </li>
           );
         })}
@@ -119,15 +118,16 @@ function Done({ me, onHub }: { me: Profile; onHub: () => void }) {
   return (
     <Frame
       signOut
+      wide
       footer={
         <Footbar forward={{ label: "Go to my hub", onClick: onHub, disabled: !openedEngage }} />
       }
     >
-      <p className="mb-3 type-eyebrow text-diploma/52">Profile complete</p>
-      <h1 className="type-display text-step">You're in.</h1>
-      <p className="mt-3 mb-4 text-note text-diploma/72">Required to open your hub:</p>
-      <TaskList done={done} pending={pendingTasks(me)} tasks={engage} />
-      <p className="mt-6 mb-4 text-note text-diploma/72">A few optional extras:</p>
+      <p className="type-eyebrow text-diploma/86">Profile complete</p>
+      <h1 className="mt-3.5 type-display text-step">You're in.</h1>
+      <p className="mt-7 mb-2.5 type-micro text-diploma/86">Required to open your hub</p>
+      <TaskList done={done} pending={pendingTasks(me)} tasks={engage} required />
+      <p className="mt-6 mb-2.5 type-micro text-diploma/86">A few optional extras</p>
       <TaskList done={done} tasks={extras} />
     </Frame>
   );
