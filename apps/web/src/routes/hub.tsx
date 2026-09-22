@@ -86,34 +86,30 @@ function Hub() {
               key={task.value}
               className={`flex min-w-0 flex-col justify-between gap-4.5 p-[clamp(20px,2.6vw,34px)] first:pl-edge last:pr-edge max-shell:px-edge ${ground}`}
             >
-              <div>
-                <div className="flex items-center gap-3">
+              <div className="flex gap-3">
+                <span className="flex h-lh flex-none items-center text-item-title">
                   <Marker state={isDone ? "done" : "todo"} onInk={onInk} />
-                  <h2 className="type-heading text-item-title">{task.title}</h2>
-                </div>
-                <p className={`mt-2 text-item ${onInk ? "text-navy/55" : "text-diploma/86"}`}>
-                  {task.detail}
-                </p>
-              </div>
-              {isDone ? (
-                <span className={`type-micro ${onInk ? "text-navy/55" : "text-diploma/86"}`}>
-                  Done
                 </span>
-              ) : (
-                <a
-                  href={task.href}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={() => void complete({ task: task.value })}
-                  className={`inline-flex h-control-sm w-fit items-center rounded-full border px-4.5 type-micro pointer-coarse:h-control-touch ${
-                    onInk
-                      ? "border-navy/55 text-navy hover:border-navy"
-                      : "border-diploma/55 text-diploma hover:border-burdell hover:text-burdell"
-                  }`}
-                >
-                  Open →
-                </a>
-              )}
+                <div className="min-w-0">
+                  <h2 className="type-heading text-item-title">{task.title}</h2>
+                  <p className={`mt-2 text-item ${onInk ? "text-navy/55" : "text-diploma/86"}`}>
+                    {task.detail}
+                  </p>
+                </div>
+              </div>
+              <a
+                href={task.href}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => void complete({ task: task.value })}
+                className={`inline-flex h-control-sm w-fit items-center rounded-full border px-4.5 type-micro pointer-coarse:h-control-touch ${
+                  onInk
+                    ? "border-navy/55 text-navy hover:border-navy"
+                    : "border-diploma/55 text-diploma hover:border-burdell hover:text-burdell"
+                }`}
+              >
+                {isDone ? "Open again →" : "Open →"}
+              </a>
             </li>
           );
         })}
