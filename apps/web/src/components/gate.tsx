@@ -134,7 +134,7 @@ function EmailStep({
         {wrongDomain ? (
           <>
             Are you with a partner company?{" "}
-            <a href="mailto:board@colorstackgt.org" className={linkClass}>
+            <a href="mailto:colorstackgt@gmail.com" className={linkClass}>
               Email the e-board
             </a>
             .

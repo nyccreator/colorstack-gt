@@ -294,7 +294,7 @@ function Landing() {
                 <div className="lp-linkgroup">
                   <div>
                     <p className="lp-colh">REACH US</p>
-                    <a href="mailto:board@colorstackgt.org">board@colorstackgt.org</a>
+                    <a href="mailto:colorstackgt@gmail.com">colorstackgt@gmail.com</a>
                     <a
                       href="https://www.instagram.com/colorstackgt/"
                       target="_blank"
