@@ -288,6 +288,7 @@ function useStage() {
 }
 
 function JoinField({ id }: { id: string }) {
+  const { isAuthenticated } = Route.useRouteContext();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -310,6 +311,16 @@ function JoinField({ id }: { id: string }) {
       return;
     }
     void navigate({ to: "/join", search: { email: address, sent: true } });
+  }
+
+  if (isAuthenticated) {
+    return (
+      <div className="lp-join">
+        <Link to="/hub" className="lp-btn">
+          Go to my hub
+        </Link>
+      </div>
+    );
   }
 
   return (
