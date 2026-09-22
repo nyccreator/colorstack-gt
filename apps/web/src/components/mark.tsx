@@ -1,6 +1,7 @@
 const SOURCES = {
   lockup: "/assets/logos/colorstack-gt-dark.svg",
   buzz: "/assets/art/buzz.svg",
+  wreck: "/assets/art/wreck.svg",
 } as const;
 
 export function Mark({
