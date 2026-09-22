@@ -6,14 +6,15 @@ import {
 } from "@colorstack-gt/backend/convex/lib/config";
 import { isGeorgiaTechEmail, normalizeEmail } from "@colorstack-gt/backend/convex/lib/identity";
 import { Link, useNavigate, useRouter } from "@tanstack/react-router";
-import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
 
 import { Frame } from "./frame";
+import { Heading } from "./heading";
 import { Mark } from "./mark";
 import { Message } from "./message";
-import { ghostButton, primaryButton } from "./onboarding/controls";
+import { ghostButton, inlineLink, primaryButton } from "./onboarding/controls";
 
 const COPY = {
   "sign-in": {
@@ -39,18 +40,6 @@ export async function sendCode(email: string): Promise<string | null> {
   return error.status === 429
     ? "Too many requests. Wait a minute and try again."
     : "We couldn't send a code. Try again.";
-}
-
-const linkClass = "border-b border-current pb-px text-diploma hover:text-burdell";
-
-function Heading({ eyebrow, title, lede }: { eyebrow: string; title: string; lede: ReactNode }) {
-  return (
-    <>
-      <p className="type-eyebrow text-diploma/86">{eyebrow}</p>
-      <h1 className="mt-3.5 type-display text-gate">{title}</h1>
-      <p className="mt-4.5 max-w-[46ch] text-lede-gate text-diploma/86">{lede}</p>
-    </>
-  );
 }
 
 function EmailStep({
@@ -136,7 +125,7 @@ function EmailStep({
         {wrongDomain ? (
           <>
             Are you with a partner company?{" "}
-            <a href="mailto:colorstackgt@gmail.com" className={linkClass}>
+            <a href="mailto:colorstackgt@gmail.com" className={inlineLink}>
               Email the e-board
             </a>
             .
@@ -144,7 +133,7 @@ function EmailStep({
         ) : (
           <>
             {copy.prompt}{" "}
-            <Link to={copy.other.to} className={linkClass}>
+            <Link to={copy.other.to} className={inlineLink}>
               {copy.other.label}
             </Link>
             .
@@ -306,13 +295,13 @@ function CodeStep({ email, onChangeEmail }: { email: string; onChangeEmail: () =
         {resent ? "If it hasn't arrived, check your Junk folder." : "Didn't arrive?"}{" "}
         {cooldown > 0 ? null : (
           <>
-            <button type="button" onClick={resend} className={`cursor-pointer ${linkClass}`}>
+            <button type="button" onClick={resend} className={`cursor-pointer ${inlineLink}`}>
               Resend
             </button>{" "}
             ·{" "}
           </>
         )}
-        <button type="button" onClick={onChangeEmail} className={`cursor-pointer ${linkClass}`}>
+        <button type="button" onClick={onChangeEmail} className={`cursor-pointer ${inlineLink}`}>
           Use a different address
         </button>
       </p>

@@ -21,6 +21,7 @@ import { type ReactNode, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 
 import { Frame } from "../frame";
+import { Heading } from "../heading";
 import { Message } from "../message";
 import { Chips, Field, Footbar, Group, Select } from "./controls";
 import {
@@ -101,15 +102,14 @@ function Screen({
       rail={<Rail index={index} />}
       footer={<Footbar step={index} total={STAGES.length} onBack={onBack} forward={forward} />}
     >
-      <p className="type-eyebrow text-diploma/86">{STAGES[index]?.title}</p>
-      <h1 className="mt-3.5 type-display text-step">{title}</h1>
+      <Heading eyebrow={STAGES[index]?.title} title={title} size="step" />
       {children}
       {error ? <Message tone="error">{error}</Message> : null}
     </Frame>
   );
 }
 
-function Rail({ index }: { index: number }) {
+export function Rail({ index }: { index: number }) {
   return (
     <>
       <p aria-hidden className="type-display text-rail">

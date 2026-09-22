@@ -130,6 +130,7 @@ const buttonClass =
 
 export const primaryButton = `${buttonClass} bg-diploma text-navy disabled:cursor-not-allowed disabled:bg-diploma/16 disabled:text-diploma/64`;
 export const ghostButton = `${buttonClass} border border-diploma/55 text-diploma hover:border-burdell hover:text-burdell`;
+export const inlineLink = "border-b border-current pb-px text-diploma hover:text-burdell";
 
 export function Footbar({
   step,

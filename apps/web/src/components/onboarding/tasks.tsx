@@ -18,6 +18,38 @@ export function pendingTasks(me: Profile): Task[] {
 
 const LINK_LABEL = { open: "Open →", pending: "In progress →", done: "Done" } as const;
 
+export const muted = (onInk?: boolean) => (onInk ? "text-navy/55" : "text-diploma/86");
+
+export function TaskLink({
+  task,
+  label,
+  onInk,
+  className = "",
+}: {
+  task: (typeof TASKS)[number];
+  label: string;
+  onInk?: boolean;
+  className?: string;
+}) {
+  const complete = useMutation(api.members.completeTask);
+
+  return (
+    <a
+      href={task.href}
+      target="_blank"
+      rel="noreferrer"
+      onClick={() => void complete({ task: task.value })}
+      className={`inline-flex h-control-sm items-center rounded-full border px-4.5 type-micro pointer-coarse:h-control-touch ${
+        onInk
+          ? "border-navy/55 text-navy hover:border-navy"
+          : "border-diploma/55 text-diploma hover:border-burdell hover:text-burdell"
+      } ${className}`}
+    >
+      {label}
+    </a>
+  );
+}
+
 export function TaskList({
   done,
   pending = [],
@@ -29,8 +61,6 @@ export function TaskList({
   tasks?: readonly (typeof TASKS)[number][];
   required?: boolean;
 }) {
-  const complete = useMutation(api.members.completeTask);
-
   return (
     <ol className="-mx-edge">
       {tasks.map((task) => {
@@ -55,30 +85,12 @@ export function TaskList({
                   </span>
                 ) : null}
               </h2>
-              <p className={`mt-1.25 text-item ${onInk ? "text-navy/55" : "text-diploma/86"}`}>
-                {task.detail}
-              </p>
+              <p className={`mt-1.25 text-item ${muted(onInk)}`}>{task.detail}</p>
             </div>
             {isDone ? (
-              <span
-                className={`flex-none type-micro ${onInk ? "text-navy/55" : "text-diploma/86"}`}
-              >
-                {LINK_LABEL.done}
-              </span>
+              <span className={`flex-none type-micro ${muted(onInk)}`}>{LINK_LABEL.done}</span>
             ) : (
-              <a
-                href={task.href}
-                target="_blank"
-                rel="noreferrer"
-                onClick={() => void complete({ task: task.value })}
-                className={`inline-flex h-control-sm flex-none items-center rounded-full border px-4.5 type-micro pointer-coarse:h-control-touch ${
-                  onInk
-                    ? "border-navy/55 text-navy hover:border-navy"
-                    : "border-diploma/55 text-diploma hover:border-burdell hover:text-burdell"
-                }`}
-              >
-                {LINK_LABEL[state]}
-              </a>
+              <TaskLink task={task} label={LINK_LABEL[state]} onInk={onInk} className="flex-none" />
             )}
           </li>
         );

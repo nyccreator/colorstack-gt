@@ -5,10 +5,11 @@ import { useState } from "react";
 import { z } from "zod";
 
 import { Frame } from "@/components/frame";
+import { Heading } from "@/components/heading";
 import { Marker } from "@/components/marker";
 import { Footbar } from "@/components/onboarding/controls";
 import { STAGES, TASKS } from "@/components/onboarding/options";
-import { type Profile, SCREENS } from "@/components/onboarding/screens";
+import { type Profile, Rail, SCREENS } from "@/components/onboarding/screens";
 import { doneTasks, pendingTasks, TaskList } from "@/components/onboarding/tasks";
 
 const searchSchema = z.object({
@@ -56,19 +57,7 @@ function Stages({
     <Frame
       signOut
       anchor="high"
-      rail={
-        <>
-          <p aria-hidden className="type-display text-rail">
-            {String(next + 1).padStart(2, "0")}
-          </p>
-          <p aria-hidden className="mt-2.5 type-micro text-diploma/64">
-            of {String(STAGES.length).padStart(2, "0")}
-          </p>
-          <p aria-hidden className="mt-4 text-band-body text-burdell">
-            {STAGES[next]?.title}
-          </p>
-        </>
-      }
+      rail={<Rail index={next} />}
       footer={
         <Footbar
           step={next}
@@ -80,10 +69,11 @@ function Stages({
         />
       }
     >
-      <p className="type-eyebrow text-diploma/86">{gated ? "Not yet" : "Welcome back"}</p>
-      <h1 className="mt-3.5 type-display text-step">
-        {gated ? "A few things first." : "You left off partway."}
-      </h1>
+      <Heading
+        eyebrow={gated ? "Not yet" : "Welcome back"}
+        title={gated ? "A few things first." : "You left off partway."}
+        size="step"
+      />
       <ol className="mt-8 grid max-w-150 gap-4.5">
         {STAGES.map((stage, index) => {
           const state =
@@ -123,8 +113,7 @@ function Done({ me, onHub }: { me: Profile; onHub: () => void }) {
         <Footbar forward={{ label: "Go to my hub", onClick: onHub, disabled: !openedEngage }} />
       }
     >
-      <p className="type-eyebrow text-diploma/86">Profile complete</p>
-      <h1 className="mt-3.5 type-display text-step">You're in.</h1>
+      <Heading eyebrow="Profile complete" title="You're in." size="step" />
       <p className="mt-7 mb-2.5 type-micro text-diploma/86">Required to open your hub</p>
       <TaskList done={done} pending={pendingTasks(me)} tasks={engage} required />
       <p className="mt-6 mb-2.5 type-micro text-diploma/86">A few optional extras</p>
