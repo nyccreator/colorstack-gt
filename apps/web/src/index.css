@@ -426,8 +426,12 @@
   inset: 0;
   display: grid;
   grid-template-rows: minmax(0, 1fr);
-  transform: translate3d(0, var(--y, 0%), 0);
+  transform: translate3d(0, var(--y, 100%), 0);
   will-change: transform;
+}
+
+.s-hero {
+  --y: 0%;
 }
 
 .scene.split {

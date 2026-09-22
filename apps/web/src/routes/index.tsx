@@ -383,10 +383,15 @@ function Landing() {
       <header className="nav-band">
         <div className="rail">
           <nav className="nav" aria-label="Main">
-            <Link to="/" aria-label="ColorStack at Georgia Tech, home" data-tone>
+            <Link
+              to="/"
+              aria-label="ColorStack at Georgia Tech, home"
+              className="on-dark"
+              data-tone
+            >
               <Mark mark="lockup" className="nav-lock" />
             </Link>
-            <div className="nav-acts" data-tone>
+            <div className="nav-acts on-dark" data-tone>
               {isAuthenticated ? (
                 <Link to="/hub" className="lp-btn">
                   Member hub
