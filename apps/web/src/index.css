@@ -278,6 +278,7 @@
   --art-h-split: clamp(150px, 40dvh, 440px);
 
   --stages: 10.4;
+  --step: 82dvh;
   --split: 36dvh;
 
   background: var(--color-diploma);
@@ -410,7 +411,7 @@
 }
 
 .shell {
-  height: calc(var(--stages) * 100dvh);
+  height: calc(var(--stages) * var(--step));
 }
 
 .stage {

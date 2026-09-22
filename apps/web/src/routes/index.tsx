@@ -107,29 +107,42 @@ const PLAN = [
   { name: "ask", enter: 8, split: 9 },
 ] as const;
 
-const PAD = 0.2;
+const PAD = 0.14;
 const LIFT = 22;
+const CATCH = 0.25;
+const GLIDE_MIN = 220;
+const GLIDE_MAX = 460;
+const SETTLES = Math.max(...PLAN.map((part) => ("split" in part ? part.split : part.enter))) + 1;
 
 const clamp01 = (value: number) => (value < 0 ? 0 : value > 1 ? 1 : value);
 const ease = (t: number) => t * t * (3 - 2 * t);
 const step = (progress: number, to: number) =>
   ease(clamp01((progress - (to - 1) - PAD) / (1 - 2 * PAD)));
 
+const tones = new Map<string, number>();
+let swatch: CanvasRenderingContext2D | null | undefined;
+
 function luminance(color: string): number {
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = 1;
-  const context = canvas.getContext("2d");
-  if (!context) return 1;
-  context.fillStyle = "#ffffff";
-  context.fillRect(0, 0, 1, 1);
-  context.fillStyle = color;
-  context.fillRect(0, 0, 1, 1);
-  const [r = 255, g = 255, b = 255] = context.getImageData(0, 0, 1, 1).data;
+  const known = tones.get(color);
+  if (known !== undefined) return known;
+  if (swatch === undefined) {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 1;
+    swatch = canvas.getContext("2d", { willReadFrequently: true });
+  }
+  if (!swatch) return 1;
+  swatch.fillStyle = "#ffffff";
+  swatch.fillRect(0, 0, 1, 1);
+  swatch.fillStyle = color;
+  swatch.fillRect(0, 0, 1, 1);
+  const [r = 255, g = 255, b = 255] = swatch.getImageData(0, 0, 1, 1).data;
   const channel = (value: number) => {
     const ratio = value / 255;
     return ratio <= 0.03928 ? ratio / 12.92 : Math.pow((ratio + 0.055) / 1.055, 2.4);
   };
-  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+  const value = 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+  tones.set(color, value);
+  return value;
 }
 
 function useStage() {
@@ -142,6 +155,10 @@ function useStage() {
       ...part,
       el: stage.querySelector<HTMLElement>(`[data-scene="${part.name}"]`),
     }));
+    const shell = stage.parentElement as HTMLElement;
+    const stride = () =>
+      shell.getBoundingClientRect().height /
+      (parseFloat(getComputedStyle(shell).getPropertyValue("--stages")) || 1);
     const parts = [...document.querySelectorAll<HTMLElement>("[data-tone]")];
     const still = matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -166,7 +183,7 @@ function useStage() {
 
     const draw = () => {
       if (!still.matches) {
-        const progress = window.scrollY / stage.getBoundingClientRect().height;
+        const progress = window.scrollY / stride();
         for (const scene of scenes) {
           if (!scene.el) continue;
           const into = scene.enter === 0 ? 1 : step(progress, scene.enter);
@@ -185,8 +202,46 @@ function useStage() {
       tone();
     };
 
+    let held = false;
+    let idle: ReturnType<typeof setTimeout>;
+    let glide = 0;
+
+    const ride = (to: number) => {
+      const from = window.scrollY;
+      const span = to - from;
+      if (Math.abs(span) < 2) return;
+      const time = Math.min(GLIDE_MAX, GLIDE_MIN + Math.abs(span) * 0.35);
+      const began = performance.now();
+      const frame = (now: number) => {
+        const t = clamp01((now - began) / time);
+        window.scrollTo(0, from + span * (1 - Math.pow(1 - t, 3)));
+        glide = t < 1 ? requestAnimationFrame(frame) : 0;
+      };
+      glide = requestAnimationFrame(frame);
+    };
+
+    const settle = () => {
+      if (held || glide || still.matches) return;
+      const height = stride();
+      const progress = window.scrollY / height;
+      const nearest = Math.min(Math.max(Math.round(progress), 0), SETTLES - 1);
+      const off = Math.abs(progress - nearest);
+      if (off < 0.01 || off > CATCH) return;
+      ride(nearest * height);
+    };
+
+    const stop = () => {
+      if (glide) cancelAnimationFrame(glide);
+      glide = 0;
+      clearTimeout(idle);
+    };
+
     let queued = false;
     const onScroll = () => {
+      if (!glide) {
+        clearTimeout(idle);
+        idle = setTimeout(settle, 90);
+      }
       if (queued) return;
       queued = true;
       requestAnimationFrame(() => {
@@ -195,13 +250,38 @@ function useStage() {
       });
     };
 
+    const onInput = () => {
+      stop();
+      idle = setTimeout(settle, 90);
+    };
+
+    const onDown = () => {
+      held = true;
+      stop();
+    };
+    const onUp = () => {
+      held = false;
+      idle = setTimeout(settle, 90);
+    };
+
     draw();
     addEventListener("scroll", onScroll, { passive: true });
     addEventListener("resize", onScroll);
+    addEventListener("wheel", onInput, { passive: true });
+    addEventListener("touchstart", onInput, { passive: true });
+    addEventListener("keydown", onInput);
+    addEventListener("pointerdown", onDown, { passive: true });
+    addEventListener("pointerup", onUp, { passive: true });
     still.addEventListener("change", draw);
     return () => {
+      stop();
       removeEventListener("scroll", onScroll);
       removeEventListener("resize", onScroll);
+      removeEventListener("wheel", onInput);
+      removeEventListener("touchstart", onInput);
+      removeEventListener("keydown", onInput);
+      removeEventListener("pointerdown", onDown);
+      removeEventListener("pointerup", onUp);
       still.removeEventListener("change", draw);
     };
   }, []);
