@@ -28,6 +28,8 @@ export function getRouter() {
   const router = createTanStackRouter({
     routeTree,
     defaultPreload: "intent",
+    // The You page places its own scroll when an editor opens or closes, including on Back.
+    scrollRestoration: ({ location }) => !["/you", "/onboarding"].includes(location.pathname),
     defaultPendingComponent: () => <Loader />,
     defaultNotFoundComponent: () => <div>Not Found</div>,
     context: { queryClient, convexQueryClient },

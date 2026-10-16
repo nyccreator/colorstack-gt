@@ -11,7 +11,14 @@ import {
 import { authComponent } from "./auth";
 import { TEXT_MAX_LENGTH } from "./lib/config";
 import { isGraduationYearAllowed } from "./lib/graduation";
-import { isEmail, isPhone, isProfileUrl, normalizeEmail, normalizeUrl } from "./lib/identity";
+import {
+  personalEmailError,
+  isPhone,
+  normalizeEmail,
+  profileError,
+  type ProfileSite,
+  profileUrl,
+} from "./lib/identity";
 import {
   contactFields,
   demographicAnswers,
@@ -22,7 +29,7 @@ import {
   task,
 } from "./schema";
 
-const skippable = v.union(v.literal(4), v.literal(6));
+const skippable = v.union(v.literal(4), v.literal(5));
 
 function findMember(ctx: QueryCtx, userId: string) {
   return ctx.db
@@ -63,10 +70,10 @@ function required(value: string, message: string): string {
   return trimmed;
 }
 
-function profileLink(value: string | undefined, message: string): string | undefined {
-  const url = normalizeUrl(value ?? "");
-  if (url && !isProfileUrl(url)) throw new ConvexError(message);
-  return url;
+function profileLink(site: ProfileSite, value = ""): string | undefined {
+  const error = profileError(site, value);
+  if (error) throw new ConvexError(error);
+  return profileUrl(site, value);
 }
 
 const profile = v.object({
@@ -82,6 +89,7 @@ const profile = v.object({
   reported: v.boolean(),
   onRoster: v.boolean(),
   complete: v.boolean(),
+  joinedAt: v.optional(v.number()),
 });
 
 export const me = query({
@@ -113,7 +121,20 @@ export const me = query({
       reported,
       onRoster,
       complete: Boolean(member?.name && member.contact && member.studies && reported),
+      joinedAt: member?._creationTime,
     };
+  },
+});
+
+export const resumeUrl = query({
+  args: {},
+  returns: v.union(v.string(), v.null()),
+  handler: async (ctx) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) return null;
+
+    const member = await findMember(ctx, user._id);
+    return member?.resume ? await ctx.storage.getUrl(member.resume.storageId) : null;
   },
 });
 
@@ -154,13 +175,11 @@ export const saveContact = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     withinLimit(args);
-    const { user, member } = await ownRow(ctx);
+    const { member } = await ownRow(ctx);
     const personalEmail = normalizeEmail(args.personalEmail);
 
-    if (!isEmail(personalEmail)) throw new ConvexError("Enter a valid email address.");
-    if (personalEmail === normalizeEmail(user.email)) {
-      throw new ConvexError("Use an address other than your Georgia Tech email.");
-    }
+    const emailError = personalEmailError(personalEmail);
+    if (emailError) throw new ConvexError(emailError);
     if (!isPhone(args.phone)) throw new ConvexError("Enter a valid phone number.");
 
     await ctx.db.patch(member._id, {
@@ -195,8 +214,8 @@ export const saveMaterials = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     withinLimit(args);
-    const linkedin = profileLink(args.linkedin, "Enter a valid LinkedIn link.");
-    const github = profileLink(args.github, "Enter a valid GitHub link.");
+    const linkedin = profileLink("linkedin", args.linkedin);
+    const github = profileLink("github", args.github);
 
     const { member } = await ownRow(ctx);
     if (args.resumeBook && !member.resume) {
@@ -229,7 +248,7 @@ export const saveDemographics = mutation({
     if (existing) await ctx.db.replace(existing._id, answers);
     else await ctx.db.insert("demographics", answers);
 
-    await ctx.db.patch(member._id, { step: Math.max(member.step, 5) });
+    await ctx.db.patch(member._id, { step: Math.max(member.step, 6) });
     return null;
   },
 });
@@ -244,7 +263,23 @@ export const saveInterests = mutation({
         lookingFor: [...new Set(args.lookingFor)],
         hobbies: [...new Set(args.hobbies)],
       },
-      step: Math.max(member.step, 6),
+      step: Math.max(member.step, 5),
+    });
+    return null;
+  },
+});
+
+export const removeResume = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const { member } = await ownRow(ctx);
+    if (!member.resume) return null;
+
+    await ctx.storage.delete(member.resume.storageId);
+    await ctx.db.patch(member._id, {
+      resume: undefined,
+      materials: member.materials && { ...member.materials, resumeBook: false },
     });
     return null;
   },

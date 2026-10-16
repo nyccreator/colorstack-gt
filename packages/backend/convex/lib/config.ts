@@ -17,3 +17,5 @@ export const TEXT_MAX_LENGTH = 254;
 export const RESUME_MAX_BYTES = 5 * 1024 * 1024;
 
 export const RESUME_CONTENT_TYPE = "application/pdf";
+
+export const resumeName = (raw: string) => raw.trim().slice(0, 120) || "resume.pdf";

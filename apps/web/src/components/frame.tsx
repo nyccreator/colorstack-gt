@@ -1,118 +1,93 @@
-import { api } from "@colorstack-gt/backend/convex/_generated/api";
-import { Link, useNavigate, useRouter } from "@tanstack/react-router";
-import { useQuery } from "convex/react";
-import { type ReactNode, useState } from "react";
+import { Link, useLocation, useNavigate, useRouter } from "@tanstack/react-router";
+import { type MouseEvent, type ReactNode, useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
+import { useSlow } from "@/lib/motion";
+import { forgetSession } from "@/lib/session";
 
+import Loader from "./loader";
 import { Mark } from "./mark";
 
-type Anchor = "high" | "mid" | "low";
+// A page still loading after a moment says so, under the bar, rather than staying blank.
+export function Waiting({ under = true }: { under?: boolean }) {
+  return <div className={under ? "pt-page" : ""}>{useSlow(true) ? <Loader /> : null}</div>;
+}
 
-const ANCHOR: Record<Anchor, string> = {
-  high: "justify-start pt-anchor",
-  mid: "justify-start pt-anchor shell:justify-center shell:pt-[calc(var(--spacing-bar)+clamp(16px,3vh,40px))] shell:pb-[calc(var(--spacing-bar)+clamp(16px,3vh,40px))]",
-  low: "justify-start pt-[calc(var(--spacing-bar)+clamp(28px,7vh,64px))] shell:pt-anchor-low",
-};
+// A page with unsaved changes reports them here, so every way of leaving it, Sign out included, asks first.
+export const unsavedWork = { check: () => false };
+export const mayLeave = () =>
+  !unsavedWork.check() || window.confirm("You have unsaved changes. Leave without saving them?");
 
 function SignOut() {
-  const me = useQuery(api.members.me);
   const router = useRouter();
   const navigate = useNavigate();
   const [pending, setPending] = useState(false);
+  const slow = useSlow(pending);
 
   async function signOut() {
+    if (!mayLeave()) return;
     setPending(true);
-    await authClient.signOut();
+    const { error } = await authClient.signOut().catch(() => ({ error: true }));
+    if (error) return setPending(false);
+    forgetSession();
     await router.invalidate();
-    await navigate({ to: "/" });
+    await navigate({ to: "/", ignoreBlocker: true });
   }
 
   return (
-    <span className="pointer-events-auto flex min-w-0 items-center gap-3 sm:gap-4.5">
-      {me ? (
-        <span className="hidden min-w-0 truncate text-button text-diploma/86 sm:block">
-          {me.gtEmail}
-        </span>
-      ) : null}
-      <button
-        type="button"
-        onClick={signOut}
-        disabled={pending}
-        className="flex h-12 flex-none cursor-pointer items-center rounded-full border border-diploma/55 px-5.5 type-button text-diploma hover:border-burdell hover:text-burdell disabled:cursor-wait"
-      >
-        {pending ? "Signing out" : "Sign out"}
-      </button>
-    </span>
+    <button
+      type="button"
+      onClick={signOut}
+      disabled={pending}
+      className="pointer-events-auto -my-2 -mr-link-x flex h-12 flex-none cursor-pointer items-center rounded-full px-link-x type-nav text-diploma/70 transition-[background-color,color] hover:bg-diploma/13 hover:text-diploma focus-visible:text-diploma active:bg-diploma/13 disabled:cursor-wait"
+    >
+      {slow ? "Signing out…" : "Sign out"}
+    </button>
   );
 }
 
-export function Bar({ signOut }: { signOut?: boolean }) {
+export function Pages({ dock }: { dock?: boolean }) {
+  const path = useLocation({ select: (location) => location.pathname });
+  // The page you're on is not a way anywhere, and following it would drop an open editor from the address.
+  const stay = (to: string) => (to === path ? (e: MouseEvent) => e.preventDefault() : undefined);
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-0 z-40 flex items-center justify-between gap-3 px-edge py-bar-pad">
+    <nav aria-label="Pages" className={dock ? "pages pages-dock" : "pages"}>
+      <Link to="/hub" onClick={stay("/hub")}>
+        Events
+      </Link>
+      <Link to="/you" onClick={stay("/you")}>
+        You
+      </Link>
+    </nav>
+  );
+}
+
+export function Bar({
+  signOut,
+  nav,
+  className = "",
+}: {
+  signOut?: boolean;
+  nav?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <header
+      className={`pointer-events-none absolute inset-x-0 top-0 z-40 flex items-center justify-between gap-3 px-edge pt-bar-top pb-bar-bottom ${className}`}
+    >
       <Link
         to="/"
         aria-label="ColorStack at Georgia Tech, home"
-        className="pointer-events-auto block h-lock"
+        className="pointer-events-auto relative block h-lock rounded-xl after:absolute after:-inset-1"
       >
         <Mark mark="lockup" className="h-full w-auto" />
       </Link>
+      {nav ? (
+        <div className="pointer-events-auto absolute top-[calc(var(--spacing-bar-top)+var(--spacing-lock)/2)] left-1/2 -translate-1/2">
+          {nav}
+        </div>
+      ) : null}
       {signOut ? <SignOut /> : null}
-    </div>
-  );
-}
-
-export function Frame({
-  children,
-  anchor = "mid",
-  art,
-  rail,
-  footer,
-  signOut,
-  wide,
-}: {
-  children: ReactNode;
-  anchor?: Anchor;
-  art?: ReactNode;
-  rail?: ReactNode;
-  footer?: ReactNode;
-  signOut?: boolean;
-  wide?: boolean;
-}) {
-  const columns = rail
-    ? "shell:grid-cols-[minmax(0,1fr)_var(--container-rail)]"
-    : art
-      ? "shell:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]"
-      : "";
-  const gutterRight = rail || art ? "pr-inset shell:pr-inset" : "pr-edge";
-
-  return (
-    <div className={`grid min-h-dvh grid-rows-[minmax(0,1fr)_auto] bg-blue-bright ${columns}`}>
-      <Bar signOut={signOut} />
-
-      <div
-        className={`flex min-h-0 flex-col overflow-y-auto pl-edge pb-[clamp(20px,4vh,44px)] ${gutterRight} ${ANCHOR[anchor]}`}
-      >
-        <div
-          className={`flex min-h-0 w-full flex-col ${wide ? "" : "max-w-column"} ${anchor === "mid" ? "shell:flex-none" : "flex-1"}`}
-        >
-          {children}
-        </div>
-      </div>
-
-      {rail ? (
-        <div className="hidden bg-navy shell:col-start-2 shell:row-span-2 shell:flex shell:flex-col shell:px-[clamp(20px,2.4vw,40px)] shell:pt-anchor shell:pb-[clamp(24px,4vh,44px)]">
-          {rail}
-        </div>
-      ) : null}
-
-      {art ? (
-        <div className="flex items-center justify-center bg-navy p-[clamp(18px,4vh,48px)] shell:col-start-2 shell:row-span-2">
-          {art}
-        </div>
-      ) : null}
-
-      {footer ?? null}
-    </div>
+    </header>
   );
 }
