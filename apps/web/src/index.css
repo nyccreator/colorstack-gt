@@ -3155,3 +3155,997 @@ body:has(.landing) {
     transition: none !important;
   }
 }
+
+/* Events: the chapter's fliers in a gallery, a month at a time. On laptops the selected event stands in a column
+   beside it; elsewhere a picked event opens over the page. It shares the You page's frame (the `.you` bar, dock,
+   icons and buttons), so the two pages never shift when the member switches between them. */
+.events {
+  --gap: 24px;
+  --btn: 40px;
+  --zm: 36px;
+  --shade: 0 6px 9px color-mix(in srgb, var(--color-navy) 30%, transparent);
+}
+
+@media (pointer: coarse) {
+  .events {
+    --btn: 44px;
+    --zm: 44px;
+  }
+}
+
+@media (max-width: 599px) {
+  .events {
+    --gap: 16px;
+  }
+}
+
+/* Each tone is named here, since Tailwind only keeps the colour tokens something refers to. */
+.events [data-tone="navy"] {
+  --bg: var(--color-navy);
+}
+
+.events [data-tone="navy-medium"] {
+  --bg: var(--color-navy-medium);
+}
+
+.events [data-tone="campanile"] {
+  --bg: var(--color-campanile);
+}
+
+.events [data-tone="tech-lawn"] {
+  --bg: var(--color-tech-lawn);
+}
+
+.events [data-tone="whistle"] {
+  --bg: var(--color-whistle);
+}
+
+/* A picture is a flier at its own shape, or the event's colour with its sticker. */
+.events .pic {
+  position: relative;
+  display: block;
+  flex: none;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--bg);
+  box-shadow: var(--shade);
+}
+
+.events .pic > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.events .pic.tone > img {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 46%;
+  height: auto;
+  translate: -50% -50%;
+  rotate: -6deg;
+  filter: drop-shadow(0 8px 18px color-mix(in srgb, var(--color-navy) 40%, transparent));
+}
+
+.events .zm {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: grid;
+  place-items: center;
+  width: var(--zm);
+  height: var(--zm);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-navy) 72%, transparent);
+}
+
+.events .zm:focus-visible {
+  outline-offset: 2px;
+}
+
+.events .zm .ic {
+  width: 17px;
+  height: 17px;
+}
+
+.events .nextup {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 9999px;
+  background: var(--color-diploma);
+  color: var(--color-navy);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--color-navy) 35%, transparent);
+}
+
+/* An event's details: its title and description, the date, the place, then its two actions side by side. Every size
+   is in ems of one --t, so the stack scales down as one to fit the screen; the smallest text stops at a floor. */
+.events .det {
+  font-size: calc(16px * var(--t, 1));
+}
+
+.events .stk .det {
+  margin-top: 1.25em;
+}
+
+.events .eyb {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 0.875em;
+  font-weight: 600;
+  line-height: 1.43;
+  color: var(--color-burdell);
+}
+
+.events .ttl {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.625em;
+  font-weight: 600;
+  line-height: 1.23;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+  outline: none;
+}
+
+.events .eyb + .ttl {
+  margin-top: 0.15em;
+}
+
+.events .ds {
+  margin: 0.667em 0 0;
+  font-size: max(14px, 0.9375em);
+  line-height: 1.53;
+  color: var(--muted);
+  text-wrap: pretty;
+}
+
+.events .fx {
+  display: grid;
+  gap: 0.5em;
+  margin-top: 1em;
+}
+
+.events .fx p {
+  display: flex;
+  align-items: center;
+  gap: 0.875em;
+  min-width: 0;
+  margin: 0;
+}
+
+.events .tl {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 2.75em;
+  height: 2.75em;
+  border-radius: 0.75em;
+  background: color-mix(in srgb, var(--color-diploma) 8%, transparent);
+}
+
+.events .tl .m3 {
+  font-family: var(--font-display);
+  font-size: max(11px, 0.6875em);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--color-burdell);
+}
+
+.events .tl .dd {
+  margin-top: 0.15em;
+  font-family: var(--font-display);
+  font-size: 1.1875em;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.events .tl .ic {
+  width: 1.25em;
+  height: 1.25em;
+  opacity: 0.86;
+}
+
+.events .fk {
+  min-width: 0;
+}
+
+.events .fk b {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1em;
+  font-weight: 600;
+  line-height: 1.31;
+  letter-spacing: -0.005em;
+}
+
+.events .fk span {
+  display: block;
+  font-size: max(13px, 0.875em);
+  line-height: 1.43;
+  color: var(--muted);
+}
+
+/* When the stack runs past the screen, its two actions stay at the foot the way onboarding's Continue does, over a fade
+   of the page's blue. */
+.events .acts {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin-top: calc(1em - 24px);
+  padding-top: 24px;
+  background: linear-gradient(transparent, var(--color-blue-bright) 24px);
+}
+
+.events .acts .add {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.events .acts .solid {
+  flex: 1;
+  min-width: 0;
+  height: max(44px, 3em);
+  padding: 0 1.375em;
+  font-size: 1em;
+}
+
+.events .acts .solid .face {
+  gap: 0.5em;
+}
+
+.events .acts .solid .ic {
+  width: 1.125em;
+  height: 1.125em;
+}
+
+/* RSVP is a tinted button beside the solid one, on the answer rows' fills: rest, hover, press. */
+.events .acts .q {
+  flex: none;
+  gap: 0.375em;
+  height: max(44px, 3em);
+  padding: 0 1.125em;
+  background: color-mix(in srgb, var(--color-diploma) 13%, transparent);
+  font-size: 1em;
+}
+
+.events .acts .q:active {
+  background: color-mix(in srgb, var(--color-diploma) 24%, transparent);
+}
+
+.events .acts .q .ic {
+  width: 0.9375em;
+  height: 0.9375em;
+}
+
+/* In a narrow column the two buttons keep their line by dropping their icons first. */
+.events .narrow .acts .ic {
+  display: none;
+}
+
+.events .narrow .acts :is(.solid, .q) {
+  padding: 0 1em;
+}
+
+/* Every event's stack, measured out of sight to find the one size that fits them all. */
+.events .probe {
+  position: fixed;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.events .probe > div {
+  display: flow-root;
+}
+
+/* The gallery: each month starts its own block. Phones give it one row at one height that scrolls sideways, edge to
+   edge; larger screens wrap it into rows of one height that fill the width. */
+.events .gal {
+  min-width: 0;
+}
+
+.events .mon + .mon,
+.events .mon + .skel {
+  margin-top: 32px;
+}
+
+/* A heading line and 12px under it, as the You page's group headings sit over their panels. */
+.events .mh {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+  margin: 0 0 var(--gap-tight);
+}
+
+.events .mo {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-value);
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.events .mh .n {
+  font-size: var(--text-label);
+  font-weight: 500;
+  line-height: 22px;
+  color: var(--muted);
+}
+
+.events .wall {
+  display: grid;
+  gap: var(--gap);
+}
+
+.events .line {
+  display: flex;
+  gap: var(--gap);
+}
+
+.events .strip {
+  display: flex;
+  gap: var(--gap);
+  margin: -8px calc(-1 * var(--spacing-edge));
+  padding: 8px var(--spacing-edge);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: var(--spacing-edge);
+  scrollbar-width: none;
+}
+
+.events .strip::-webkit-scrollbar {
+  display: none;
+}
+
+.events .strip.still {
+  overflow: hidden;
+}
+
+.events .t {
+  flex: none;
+  min-width: 0;
+  scroll-snap-align: start;
+}
+
+.events .pick {
+  display: block;
+  border-radius: 16px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.events .t.on .pick {
+  outline: 3px solid var(--color-diploma);
+  outline-offset: 4px;
+}
+
+.events .t .pick:focus-visible {
+  outline: 2px solid var(--color-burdell);
+  outline-offset: 4px;
+}
+
+.events .cap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "m b" "t t";
+  align-items: center;
+  column-gap: 8px;
+  margin-top: 8px;
+}
+
+.events .cap .meta {
+  grid-area: m;
+  overflow: hidden;
+  font-size: var(--text-label);
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.events .cap .meta em {
+  font-style: normal;
+  color: var(--color-burdell);
+}
+
+.events .cap .ct {
+  grid-area: t;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  min-height: 44px;
+  margin-top: 2px;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: var(--text-value);
+  font-weight: 600;
+  line-height: 22px;
+  letter-spacing: -0.005em;
+}
+
+.events .cap .add {
+  grid-area: b;
+}
+
+.events .ra {
+  display: grid;
+  place-items: center;
+  width: var(--btn);
+  height: var(--btn);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-diploma) 13%, transparent);
+  cursor: pointer;
+  transition:
+    background-color 0.18s,
+    scale 0.1s;
+}
+
+.events .ra:active {
+  scale: 0.97;
+}
+
+/* Laptops tall enough for the pinned bar: the selected event keeps its column while the gallery scrolls past. The
+   column is as wide as the stack that fits the screen, and scrolls on its own when even that runs long. */
+@media (min-width: 1024px) and (min-height: 560px) {
+  .events main {
+    display: grid;
+    grid-template-columns: var(--fw, 300px) minmax(0, 1fr);
+    align-items: start;
+    column-gap: clamp(40px, 4.5vw, 64px);
+    padding: 0 0 0 var(--spacing-edge);
+  }
+
+  .events .side-event {
+    position: sticky;
+    top: 0;
+    height: 100dvh;
+    padding: var(--spacing-page) 0 32px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+  }
+
+  .events .side-event::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Scrolled on its own, the column fades out under the bar rather than cutting its flier flat there. */
+  .events .side-event::before {
+    content: "";
+    position: sticky;
+    top: var(--spacing-bar);
+    z-index: 2;
+    display: block;
+    height: 24px;
+    margin-bottom: -24px;
+    background: linear-gradient(var(--color-blue-bright), transparent);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+
+  .events .side-event.lifted::before {
+    opacity: 1;
+  }
+
+  /* 8px of room on the left keeps the selected ring whole; the gallery ends on the page's edge. */
+  .events .gal {
+    margin-left: -8px;
+    padding: var(--spacing-page) var(--spacing-edge) 48px 8px;
+  }
+}
+
+/* Skeletons hold the gallery's shape when there's little or nothing in it: fliers, captions and month names as faint
+   shapes. They fill only what's left of the screen and fade out by its foot. */
+.events .skel {
+  overflow: hidden;
+  mask-image: linear-gradient(rgb(0 0 0 / 85%), transparent);
+}
+
+.events .sk {
+  pointer-events: none;
+}
+
+.events .skp {
+  display: block;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--color-diploma) 6%, transparent);
+}
+
+.events .sk .cap i {
+  display: block;
+  height: 10px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--color-diploma) 9%, transparent);
+}
+
+.events .sk .cap .meta {
+  display: flex;
+  align-items: center;
+  height: 20px;
+}
+
+.events .sk .cap .ct {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding-top: 5px;
+}
+
+.events .sk .cap .ct i {
+  height: 12px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--color-diploma) 10%, transparent);
+}
+
+.events .sk .ra {
+  grid-area: b;
+  background: color-mix(in srgb, var(--color-diploma) 6%, transparent);
+}
+
+.events .skm {
+  display: block;
+  width: 76px;
+  height: 12px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--color-diploma) 10%, transparent);
+}
+
+/* No events: the event sticker on its card, the message and the follow link, in the selected event's place. Tablets
+   keep the laptop's column beside the skeletons; phones stack it above them. */
+.events .empty {
+  margin-bottom: 40px;
+}
+
+.events .zcol {
+  display: grid;
+  grid-template-columns: var(--zw) minmax(0, 1fr);
+  align-items: start;
+  column-gap: var(--cg);
+}
+
+/* The You page's Instagram link, on a panel of its own. */
+.events .follow {
+  margin-top: 20px;
+  padding: 4px;
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--color-navy) 36%, transparent);
+}
+
+.events .follow a {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "logo title out" "about about .";
+  align-items: center;
+  gap: 3px 10px;
+  min-height: 64px;
+  padding: 10px 14px 10px 12px;
+  border-radius: 20px;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.18s;
+}
+
+.events .follow a:focus-visible {
+  outline-offset: 2px;
+}
+
+.events .follow img {
+  grid-area: logo;
+  align-self: start;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+}
+
+.events .follow b {
+  grid-area: title;
+  font-family: var(--font-display);
+  font-size: var(--text-value);
+  font-weight: 600;
+  line-height: 1.3;
+  text-wrap: balance;
+}
+
+.events .follow span {
+  grid-area: about;
+  font-size: var(--text-fine);
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.events .follow .ic {
+  grid-area: out;
+  align-self: start;
+  margin-top: 2px;
+  opacity: 0.45;
+}
+
+.events .follow a:active {
+  background: color-mix(in srgb, var(--color-diploma) 8%, transparent);
+}
+
+.events .add {
+  display: flex;
+}
+
+.events .face {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* For a moment after a calendar is chosen, the button says so in the You page's Saved style, then turns back. */
+.events .solid.added {
+  background: color-mix(in srgb, var(--color-diploma) 13%, transparent);
+  color: var(--color-diploma);
+}
+
+.events .ra.added {
+  background: transparent;
+}
+
+.events .added .ic {
+  background: var(--color-burdell);
+}
+
+/* Calendars to choose from, beside the button that opened them; Add places it. It is the site's one popover shape, as
+   onboarding's major suggestions are: navy, 24px corners, a 4px inset, 48px items on 20px corners. */
+.events .menu {
+  position: fixed;
+  z-index: 60;
+  width: 264px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border-radius: 24px;
+  background: var(--color-navy);
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--color-navy) 35%, transparent);
+}
+
+.events .menu :is(a, button) {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 16px;
+  border-radius: 20px;
+  font-family: var(--font-display);
+  font-size: var(--text-control);
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.18s;
+}
+
+.events .menu :is(a, button):focus-visible {
+  outline-offset: 2px;
+}
+
+.events .menu :is(a, button):active {
+  background: color-mix(in srgb, var(--color-diploma) 13%, transparent);
+}
+
+/* Phones and tablets: a picked event opens over the page in a dialog, one event a page, swiped sideways. The site's
+   soft fade above a pinned bar sits over the foot, so what runs on under the bar fades out rather than being cut. */
+.events .view {
+  --ctlh: 54px;
+  --below: 24px;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--color-diploma);
+}
+
+.events .view::backdrop {
+  background: transparent;
+}
+
+.events .view:focus {
+  outline: none;
+}
+
+.events .view::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: auto 0 0;
+  height: calc(var(--ctlh) + var(--below) + 24px + env(safe-area-inset-bottom));
+  background: linear-gradient(transparent, var(--color-blue-bright) 24px);
+  pointer-events: none;
+}
+
+html:has(.events .view[open]) {
+  overflow: hidden;
+}
+
+.events .view .bg {
+  position: absolute;
+  inset: 0;
+  background: var(--color-blue-bright);
+}
+
+/* The widest an opened event may be; on a phone on its side the screen's height holds it down. */
+.events .ruler {
+  position: absolute;
+  width: min(100% - 2 * var(--spacing-edge), 460px, 75dvh);
+  height: 0;
+  visibility: hidden;
+}
+
+.events .slide {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.events .slide::-webkit-scrollbar {
+  display: none;
+}
+
+/* A page centres its event when it fits and scrolls from the top when it doesn't. */
+.events .pg {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  padding: max(24px, env(safe-area-inset-top)) 0
+    calc(var(--ctlh) + var(--below) + 24px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+.events .pg-in {
+  width: var(--w, min(100% - 2 * var(--spacing-edge), 460px));
+  margin: auto;
+  transform-origin: 50% 0;
+}
+
+.events .view .pic {
+  border-radius: 16px;
+  transform-origin: 0 0;
+}
+
+.events .ctl {
+  position: absolute;
+  z-index: 2;
+  bottom: calc(var(--below) + env(safe-area-inset-bottom));
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100vw - 32px);
+  padding: 5px;
+  border-radius: 9999px;
+  background: var(--color-navy);
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--color-navy) 35%, transparent);
+  translate: -50% 0;
+}
+
+.events .ctl .cl {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-diploma) 13%, transparent);
+  cursor: pointer;
+  transition: background-color 0.18s;
+}
+
+.events .ctl .sep {
+  flex: none;
+  width: 1px;
+  height: 24px;
+  margin: 0 4px;
+  background: color-mix(in srgb, var(--color-diploma) 16%, transparent);
+}
+
+/* Every event's flier, the one showing ringed. The ring is as tall as the ×, and the strip leaves it room. */
+.events .reel {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.events .reel::-webkit-scrollbar {
+  display: none;
+}
+
+/* An edge with more fliers past it fades, so the last one in view isn't cut flat inside the bar's round end. */
+.events .reel[data-after] {
+  mask-image: linear-gradient(90deg, #000 calc(100% - 16px), transparent);
+}
+
+.events .reel[data-before] {
+  mask-image: linear-gradient(90deg, transparent, #000 16px);
+}
+
+.events .reel[data-before][data-after] {
+  mask-image: linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 16px), transparent);
+}
+
+.events .reel button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.events .reel button:focus-visible {
+  outline: none;
+}
+
+.events .reel .th {
+  position: relative;
+  display: block;
+  width: 29px;
+  height: 36px;
+  overflow: hidden;
+  border-radius: 7px;
+  background: var(--bg);
+  opacity: 0.5;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition:
+    opacity 0.2s,
+    outline-color 0.2s;
+}
+
+/* On touch each flier takes a 44px target; the drawn flier and its ring stay the same size. */
+@media (pointer: coarse) {
+  .events .reel {
+    gap: 0;
+    padding: 0;
+  }
+
+  .events .reel button {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+.events .reel img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.events .reel img.st {
+  position: absolute;
+  inset: 22%;
+  width: 56%;
+  height: auto;
+  object-fit: contain;
+}
+
+.events .reel button[aria-current] .th {
+  opacity: 1;
+  outline-color: var(--color-diploma);
+}
+
+.events .reel button:focus-visible .th {
+  outline-color: var(--color-burdell);
+}
+
+@media (hover: hover) {
+  .events .ra:hover,
+  .events .acts .q:hover,
+  .events .solid.added:hover {
+    background: color-mix(in srgb, var(--color-diploma) 19%, transparent);
+  }
+
+  .events .ra.added:hover,
+  .events .follow a:hover {
+    background: color-mix(in srgb, var(--color-diploma) 5%, transparent);
+  }
+
+  .events .menu :is(a, button):hover {
+    background: color-mix(in srgb, var(--color-diploma) 8%, transparent);
+  }
+
+  .events .ctl .cl:hover {
+    background: color-mix(in srgb, var(--color-diploma) 19%, transparent);
+  }
+
+  .events .reel button:not([aria-current]):hover .th {
+    opacity: 0.85;
+  }
+}
+
+@media (max-width: 599px) {
+  .events .pg {
+    padding-top: max(16px, env(safe-area-inset-top));
+  }
+
+  /* Skeleton rows run to the screen's edges, as real ones do. */
+  .events .skel {
+    margin-inline: calc(-1 * var(--spacing-edge));
+    padding-inline: var(--spacing-edge);
+  }
+
+  .events .stk .det {
+    margin-top: 1em;
+  }
+
+  .events .stk .ds {
+    margin-top: 0.533em;
+  }
+
+  .events .cap {
+    column-gap: 4px;
+    margin-top: 6px;
+  }
+
+  .events .cap .ct {
+    min-height: 40px;
+    font-size: var(--text-label);
+    line-height: 20px;
+  }
+
+  .events .cap .meta {
+    font-size: 13px;
+    line-height: 18px;
+  }
+
+  .events .pic,
+  .events .pick,
+  .events .skp {
+    border-radius: 12px;
+  }
+
+  .events .t.on .pick {
+    outline-width: 2px;
+    outline-offset: 3px;
+  }
+
+  .events .mon + .mon,
+  .events .mon + .skel {
+    margin-top: 24px;
+  }
+
+  .events .empty {
+    margin-bottom: 32px;
+  }
+}
