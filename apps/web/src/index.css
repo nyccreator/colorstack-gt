@@ -4,12 +4,14 @@
 
 @source "./**/*.{ts,tsx}";
 
+@custom-variant roomy (@media (min-width: 700px) and (min-height: 600px));
+@custom-variant tall (@media (min-width: 700px) and (min-height: 880px));
+
 /* Brand colors are from brand.gatech.edu/our-look/colors */
 @theme {
   /* Core */
   --color-navy: #051e39;
   --color-gold: #b39051;
-  --color-gold-dark: #8f713d;
 
   /* Secondary */
   --color-diploma: #f9f6e5;
@@ -30,84 +32,75 @@
   /* Type */
   --font-sans: "DM Sans Variable", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Hanken Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
-  --tracking-wide: 0.05em;
 
   /* Display */
-  --text-hero: clamp(34px, min(6vw, 9.4vh), 84px);
-  --text-hero--line-height: 0.94;
-  --text-hero--letter-spacing: -0.035em;
-
-  --text-gate: clamp(30px, 4.4vw, 56px);
-  --text-gate--line-height: 0.98;
-  --text-gate--letter-spacing: -0.03em;
-
-  --text-step: clamp(26px, 3.4vw, 44px);
-  --text-step--line-height: 0.98;
-  --text-step--letter-spacing: -0.03em;
-
   --text-band: clamp(28px, min(4.8vw, 7.8vh), 70px);
   --text-band--line-height: 1;
   --text-band--letter-spacing: -0.03em;
 
-  --text-stat: clamp(36px, min(5.2vw, 8.2vh), 78px);
-  --text-stat--line-height: 0.9;
-  --text-stat--letter-spacing: -0.04em;
+  --text-title: 36px;
+  --text-title--line-height: 1.15;
+  --text-title--letter-spacing: -0.025em;
 
-  --text-rail: clamp(40px, 5.6vw, 84px);
-  --text-rail--line-height: 0.88;
-  --text-rail--letter-spacing: -0.04em;
-
-  --text-code: clamp(24px, 3vw, 34px);
+  --text-code: 19px;
 
   /* Text */
   --text-lede: clamp(16px, min(1.4vw, 2.35vh), 21px);
   --text-lede--line-height: 1.55;
-  --text-lede-gate: clamp(15px, 1.4vw, 19px);
-  --text-lede-gate--line-height: 1.5;
   --text-band-body: clamp(15px, min(1.15vw, 2vh), 18px);
   --text-band-body--line-height: 1.5;
+  --text-subtitle: 17px;
+  --text-subtitle--line-height: 1.5;
   --text-item-title: clamp(19px, min(1.65vw, 2.9vh), 27px);
   --text-item-title--line-height: 1.1;
-  --text-stage: clamp(17px, 1.9vw, 24px);
-  --text-stage--line-height: 1.15;
-  --text-nav: 16px;
-  --text-item: clamp(12px, 1.15vw, 15px);
-  --text-item--line-height: 1.45;
-  --text-note: clamp(13px, 1.15vw, 15px);
-  --text-note--line-height: 1.55;
+  --text-nav: 20px;
   --text-control: 16px;
-  --text-hint: clamp(11px, 1vw, 13px);
-  --text-hint--line-height: 1.5;
+  --text-message: 15px;
+  --text-message--line-height: 1.5;
 
-  /* Uppercase labels */
-  --text-button: clamp(14px, 1.3vw, 16px);
-  --text-eyebrow: clamp(11px, 0.95vw, 13px);
-  --text-label: clamp(11px, 1vw, 13px);
-  --text-micro: clamp(11px, 0.9vw, 12px);
-
-  --breakpoint-shell: 820px;
+  /* Labels */
+  --text-eyebrow: clamp(16px, min(1.35vw, 2.2vh), 20px);
+  --text-label: 15px;
+  --text-fine: 14px;
+  --text-value: 17px;
 
   /* Layout */
   --spacing-gutter: clamp(24px, 4vw, 56px);
   --spacing-edge: max(var(--spacing-gutter), calc((100vw - 1280px) / 2));
-  --spacing-inset: clamp(22px, 3vw, 48px);
 
-  --spacing-lock: clamp(48px, 4vw, 56px);
-  --spacing-bar-pad: clamp(12px, 1.8vh, 16px);
-  --spacing-bar: calc(var(--spacing-lock) + 2 * var(--spacing-bar-pad));
+  --spacing-lock: 56px;
+  --spacing-bar-top: 24px;
+  --spacing-bar-bottom: 16px;
+  --spacing-bar: calc(var(--spacing-lock) + var(--spacing-bar-top) + var(--spacing-bar-bottom));
   --spacing-anchor: calc(var(--spacing-bar) + clamp(18px, 4vh, 54px));
-  --spacing-anchor-low: clamp(140px, 24vh, 260px);
+  /* A screen's title sits here on the gate and in onboarding, under onboarding's progress bar. */
+  --spacing-title: calc(var(--spacing-anchor) + 68px);
+  /* Where the member pages' content starts under the bar. */
+  --spacing-page: calc(var(--spacing-bar) + 32px);
 
+  --spacing-field-pad: clamp(14px, 1.6vw, 22px);
   --spacing-control: clamp(44px, 5.4vh, 54px);
   --spacing-control-sm: clamp(38px, 4.6vh, 46px);
   --spacing-control-touch: 44px;
-  --container-field: 520px;
-  --container-form: 560px;
-  --container-column: 860px;
-  --container-rail: clamp(240px, 26vw, 400px);
+  --spacing-control-lg: 52px;
+  --spacing-link-x: clamp(14px, 1.4vw, 20px);
+  --container-gate: 448px;
 
-  /* Motion */
-  --animate-roll: roll 34s linear infinite;
+  /* Motion: the same curves as lib/motion.ts */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-move: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-appear: cubic-bezier(0.23, 1, 0.32, 1);
+  --default-transition-duration: 180ms;
+  --default-transition-timing-function: ease;
+  --animate-roll: roll 54s linear infinite;
+  --animate-rise: rise 300ms var(--ease-out-quint) backwards;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+  }
 
   @keyframes roll {
     to {
@@ -127,38 +120,118 @@
 }
 
 @utility type-eyebrow {
+  font-family: var(--font-display);
   font-size: var(--text-eyebrow);
   font-weight: 500;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  letter-spacing: -0.005em;
 }
 
 @utility type-label {
   font-size: var(--text-label);
   font-weight: 500;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
 }
 
-@utility type-micro {
-  font-size: var(--text-micro);
-  font-weight: 500;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+@utility type-nav {
+  font-family: var(--font-display);
+  font-size: var(--text-nav);
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
-@utility type-button {
-  font-size: var(--text-button);
-  font-weight: 500;
+/* Every icon on the site is one of these, drawn in the text's colour: a 2.2 stroke, the tick 2.6. Icons inside a
+   button keep its full colour; an arrow trailing a link sits at 45%. */
+@layer components {
+  .ic {
+    display: block;
+    flex: none;
+    width: 18px;
+    height: 18px;
+    background: currentColor;
+    mask: var(--m) center / contain no-repeat;
+  }
+
+  .ic.chev {
+    --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 6l6 6-6 6'/%3E%3C/svg%3E");
+  }
+
+  .ic.back {
+    --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 5l-7 7 7 7'/%3E%3C/svg%3E");
+  }
+
+  .ic.out {
+    --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 16L16 8M9 8h7v7'/%3E%3C/svg%3E");
+  }
+
+  .ic.tick {
+    --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
+  }
+
+  .ic.cal {
+    --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='15' rx='3'/%3E%3Cpath d='M8 3v4M16 3v4M4 10h16'/%3E%3C/svg%3E");
+  }
+
+  .ic.add {
+    --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='15' rx='3'/%3E%3Cpath d='M8 3v4M16 3v4M12 10.5v6M9 13.5h6'/%3E%3C/svg%3E");
+  }
+
+  .ic.pin {
+    --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z'/%3E%3Ccircle cx='12' cy='10' r='2.4'/%3E%3C/svg%3E");
+  }
+
+  .ic.zoom {
+    --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5'/%3E%3C/svg%3E");
+  }
+
+  .ic.x {
+    --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M6 6l12 12M18 6L6 18'/%3E%3C/svg%3E");
+  }
 }
 
 @layer base {
+  @media (min-width: 481px) and (max-height: 700px) {
+    :root {
+      --spacing-lock: 44px;
+      --spacing-bar-top: 12px;
+      --spacing-bar-bottom: 8px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    :root {
+      --spacing-lock: 44px;
+      --spacing-bar-top: 18px;
+      --spacing-bar-bottom: 12px;
+      --spacing-page: calc(var(--spacing-bar) + 22px);
+    }
+  }
+
+  @media (max-width: 480px) and (max-height: 600px) {
+    :root {
+      --spacing-lock: 40px;
+      --spacing-bar-top: 12px;
+      --spacing-bar-bottom: 8px;
+    }
+  }
+
+  /* The same query as the roomy variant, so the gate's sizes and gaps switch together. */
+  @media (min-width: 700px) and (min-height: 600px) {
+    :root {
+      --text-title: 52px;
+      --text-subtitle: 20px;
+      --text-code: 22px;
+      --text-message: 17px;
+      --spacing-control-lg: 64px;
+      --spacing-title: calc(var(--spacing-anchor) + 76px);
+    }
+  }
+
+  /* Every page but the landing is drawn on the blue, so overscrolling or iOS scrolling past the end under the keyboard
+     shows more of it rather than a dark band. */
   body {
     margin: 0;
-    background: var(--color-navy);
+    background: var(--color-blue-bright);
     color: var(--color-diploma);
     font-family: var(--font-sans);
-    letter-spacing: var(--tracking-wide);
     -webkit-font-smoothing: antialiased;
   }
 
@@ -169,26 +242,42 @@
 
   :focus-visible {
     outline: 2px solid var(--color-burdell);
-    outline-offset: 3px;
+    outline-offset: 4px;
   }
 
   input:not([type="checkbox"], [type="radio"]),
   select,
   textarea {
     width: 100%;
-    border: 1px solid color-mix(in srgb, var(--color-diploma) 26%, transparent);
+    border: 0;
     border-radius: 9999px;
-    background: color-mix(in srgb, var(--color-navy) 38%, transparent);
+    background: color-mix(in srgb, var(--color-navy) 45%, transparent);
     color: var(--color-diploma);
-    font-family: var(--font-sans);
-    letter-spacing: var(--tracking-wide);
+    font-family: var(--font-display);
     font-size: var(--text-control);
+    font-weight: 500;
+    letter-spacing: -0.01em;
     height: var(--spacing-control);
-    padding: 0 clamp(14px, 1.6vw, 22px);
+    padding: 0 var(--spacing-field-pad);
     appearance: none;
   }
 
-  select {
+  input:not([type="checkbox"], [type="radio"]):focus,
+  select:focus,
+  textarea:focus {
+    outline: 2px solid var(--color-burdell);
+    outline-offset: 4px;
+  }
+
+  input:not([type="checkbox"], [type="radio"])[aria-invalid="true"],
+  select[aria-invalid="true"],
+  textarea[aria-invalid="true"] {
+    outline: 2px solid var(--color-azalea);
+    outline-offset: 4px;
+  }
+
+  select,
+  input[list] {
     padding-right: 44px;
     background-image:
       linear-gradient(
@@ -208,6 +297,11 @@
     background-repeat: no-repeat;
   }
 
+  /* A field with suggestions shows the same arrow as a select; the browser's own stays on top, unseen, to open the list. */
+  input[list]::-webkit-calendar-picker-indicator {
+    opacity: 0;
+  }
+
   select option {
     background: var(--color-navy);
     color: var(--color-diploma);
@@ -215,10 +309,6 @@
 
   ::placeholder {
     color: color-mix(in srgb, var(--color-diploma) 60%, transparent);
-  }
-
-  [aria-invalid="true"]:not([type="checkbox"], [type="radio"]) {
-    border-color: color-mix(in srgb, var(--color-azalea) 70%, transparent);
   }
 
   input[type="checkbox"] {
@@ -252,14 +342,72 @@
     }
   }
 
+  /* The You page's bar keeps its scroll-driven edge, which marks a state rather than moving anything. */
   @media (prefers-reduced-motion: reduce) {
-    *,
+    *:not(.you .bar),
     *::before,
     *::after {
       animation: none !important;
       scroll-behavior: auto !important;
     }
   }
+
+  /* Forced colours drop the drawn arrows, so selects and suggestion fields show the system's own. */
+  @media (forced-colors: active) {
+    select {
+      appearance: auto;
+    }
+
+    input[list]::-webkit-calendar-picker-indicator {
+      opacity: 1;
+    }
+  }
+}
+
+/* A field taking focus scrolls clear of onboarding's pinned button and its fade, wherever that button is pinned. */
+@media (max-width: 699px) and (min-height: 500px), (max-height: 879px) and (min-height: 500px) {
+  html:has([data-pin]) {
+    scroll-padding-bottom: calc(var(--spacing-control-lg) + 5rem);
+  }
+}
+
+.prefixed {
+  display: flex;
+  align-items: center;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-navy) 45%, transparent);
+  color: var(--color-diploma);
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  cursor: text;
+}
+
+.prefixed > span {
+  flex: none;
+  color: color-mix(in srgb, var(--color-diploma) 60%, transparent);
+}
+
+.prefixed > input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  font-size: inherit;
+  outline: none;
+}
+
+.prefixed:has(input:focus) {
+  outline: 2px solid var(--color-burdell);
+  outline-offset: 4px;
+}
+
+.prefixed:has(input[aria-invalid="true"]) {
+  outline: 2px solid var(--color-azalea);
+  outline-offset: 4px;
 }
 
 /* Landing */
@@ -927,5 +1075,98 @@ footer > .bx {
 
   .item {
     padding-block: var(--bx-p);
+  }
+}
+
+/* The Hub and You switch: centred in the bar, a dock at the foot on phones */
+.pages {
+  display: flex;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 9999px;
+  background: var(--color-navy);
+}
+
+.pages a {
+  display: inline-flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 24px;
+  border-radius: 9999px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: color-mix(in srgb, var(--color-diploma) 70%, transparent);
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color 0.18s,
+    color 0.18s;
+}
+
+/* Inside the pill the ring sits closer, so it stays within the pill and clear of the other link. */
+.pages a:focus-visible {
+  outline-offset: 1px;
+}
+
+.pages a[aria-current="page"] {
+  background: color-mix(in srgb, var(--color-diploma) 13%, transparent);
+  color: var(--color-diploma);
+  cursor: default;
+}
+
+@media (hover: hover) {
+  .pages a:not([aria-current="page"]):hover {
+    background: color-mix(in srgb, var(--color-diploma) 13%, transparent);
+    color: var(--color-diploma);
+  }
+}
+
+.pages a:not([aria-current="page"]):active {
+  background: color-mix(in srgb, var(--color-diploma) 13%, transparent);
+}
+
+.pages-dock {
+  display: none;
+}
+
+@media (max-width: 480px) {
+  .pages:not(.pages-dock) {
+    display: none;
+  }
+
+  .pages-dock {
+    position: fixed;
+    z-index: 50;
+    bottom: 24px;
+    left: 50%;
+    display: flex;
+    translate: -50% 0;
+    box-shadow: 0 10px 30px color-mix(in srgb, var(--color-navy) 35%, transparent);
+    transition:
+      opacity 0.22s,
+      translate 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .pages-dock a {
+    padding: 0 22px;
+    font-size: var(--text-control);
+  }
+
+  .you.editing .pages-dock {
+    translate: -50% 160%;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity 0.22s,
+      translate 0.4s cubic-bezier(0.32, 0.72, 0, 1),
+      visibility 0s linear 0.4s;
+  }
+
+  /* Keyboard focus stops short of the dock. */
+  :root:has(.pages-dock) {
+    scroll-padding-bottom: 104px;
   }
 }
