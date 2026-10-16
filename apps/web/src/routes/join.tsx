@@ -1,18 +1,13 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { z } from "zod";
 
-import { Gate } from "@/components/gate";
-
-const searchSchema = z.object({
-  email: z.string().optional().catch(undefined),
-  sent: z.boolean().optional().catch(undefined),
-});
+import { Gate, gateSearch } from "@/components/gate";
 
 export const Route = createFileRoute("/join")({
-  validateSearch: searchSchema,
+  validateSearch: gateSearch,
   beforeLoad: ({ context }) => {
     if (context.isAuthenticated) throw redirect({ to: "/onboarding" });
   },
+  head: () => ({ meta: [{ title: "Join · ColorStack at Georgia Tech" }] }),
   component: Join,
 });
 
