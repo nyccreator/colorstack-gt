@@ -13,6 +13,7 @@ import type * as email from "../email.js";
 import type * as healthCheck from "../healthCheck.js";
 import type * as http from "../http.js";
 import type * as lib_config from "../lib/config.js";
+import type * as lib_demographics from "../lib/demographics.js";
 import type * as lib_graduation from "../lib/graduation.js";
 import type * as lib_identity from "../lib/identity.js";
 import type * as lib_programs from "../lib/programs.js";
@@ -28,6 +29,7 @@ declare const fullApi: ApiFromModules<{
   healthCheck: typeof healthCheck;
   http: typeof http;
   "lib/config": typeof lib_config;
+  "lib/demographics": typeof lib_demographics;
   "lib/graduation": typeof lib_graduation;
   "lib/identity": typeof lib_identity;
   "lib/programs": typeof lib_programs;

@@ -3,7 +3,7 @@ import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
 import { authComponent, createAuth } from "./auth";
-import { RESUME_CONTENT_TYPE, RESUME_MAX_BYTES } from "./lib/config";
+import { RESUME_CONTENT_TYPE, RESUME_MAX_BYTES, resumeName } from "./lib/config";
 
 const http = httpRouter();
 
@@ -40,8 +40,7 @@ const uploadResume = httpAction(async (ctx, request) => {
     return new Response("Keep the file under 5MB.", { status: 413, headers });
   }
 
-  const name =
-    (new URL(request.url).searchParams.get("name") ?? "").trim().slice(0, 120) || "resume.pdf";
+  const name = resumeName(new URL(request.url).searchParams.get("name") ?? "");
   const storageId = await ctx.storage.store(blob);
 
   try {
