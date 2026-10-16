@@ -18,15 +18,14 @@ export const CLASS_STANDINGS = [
   { value: "third_year", label: "Third-year" },
   { value: "fourth_year", label: "Fourth-year" },
   { value: "fifth_year_plus", label: "Fifth-year+" },
-  { value: "masters", label: "Master's" },
+  { value: "masters", label: "Master’s" },
   { value: "phd", label: "PhD" },
 ] as const satisfies Options<Studies["classStanding"]>;
 
 export const SEASONS = [
+  { value: "fall", label: "Fall" },
   { value: "spring", label: "Spring" },
   { value: "summer", label: "Summer" },
-  { value: "fall", label: "Fall" },
-  { value: "winter", label: "Winter" },
 ] as const satisfies Options<Studies["graduationSeason"]>;
 
 export const GPA_RANGES = [
@@ -35,7 +34,7 @@ export const GPA_RANGES = [
   { value: "2_9_to_3_2", label: "2.9 – 3.2" },
   { value: "3_3_to_3_6", label: "3.3 – 3.6" },
   { value: "3_7_to_4_0", label: "3.7 – 4.0" },
-  { value: "not_applicable", label: "N/A" },
+  { value: "not_applicable", label: "Not applicable" },
 ] as const satisfies Options<Studies["gpa"]>;
 
 export const RACES = [
@@ -93,8 +92,8 @@ export const STAGES = [
   { title: "How we reach you" },
   { title: "Your studies" },
   { title: "Your career" },
-  { title: "Your background" },
   { title: "Your interests" },
+  { title: "Your background" },
 ] as const;
 
 export const TASKS = [
@@ -119,7 +118,7 @@ export const TASKS = [
   },
   {
     value: "instagram",
-    title: "Follow @colorstackgt",
+    title: "Follow @colorstackgt on Instagram",
     detail: "Upcoming events, recaps, and recruiting deadlines.",
     href: "https://www.instagram.com/colorstackgt/",
   },
