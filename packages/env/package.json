@@ -8,12 +8,10 @@
   },
   "dependencies": {
     "@t3-oss/env-core": "^0.13.11",
-    "dotenv": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@colorstack-gt/config": "workspace:*",
-    "@colorstack-gt/infra": "workspace:*",
     "@types/node": "catalog:",
     "typescript": "catalog:"
   }
