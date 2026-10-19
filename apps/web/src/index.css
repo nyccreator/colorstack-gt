@@ -281,7 +281,6 @@
     }
   }
 
-  /* The body is blue too, so overscroll and iOS's scroll past the end under the keyboard show the page's blue. */
   body {
     -webkit-tap-highlight-color: transparent;
     margin: 0;
@@ -353,7 +352,6 @@
     background-repeat: no-repeat;
   }
 
-  /* A suggestion field shows a select's arrow while the browser's own stays on top, unseen, to open the list. */
   input[list]::-webkit-calendar-picker-indicator {
     opacity: 0;
   }
@@ -401,7 +399,7 @@
   /* The You page's bar edge and the spinners keep running, since they mark a state rather than moving anything. */
   @media (prefers-reduced-motion: reduce) {
     *:not(.you .bar, .you .spin, .animate-spin, .animate-rise, .animate-note),
-    *::before,
+    *:not(.events .side-event)::before,
     *::after {
       animation: none !important;
       scroll-behavior: auto !important;
@@ -419,7 +417,6 @@
     }
   }
 
-  /* Forced colours drop the drawn arrows, so selects and suggestion fields show the system's own. */
   @media (forced-colors: active) {
     select {
       appearance: auto;
@@ -482,7 +479,6 @@ html:has([data-pin]) {
   outline-offset: 4px;
 }
 
-/* The router's development badge sits over Cancel on a phone. */
 @media (pointer: coarse) {
   .TanStackRouterDevtools {
     display: none;

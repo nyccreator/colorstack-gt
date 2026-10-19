@@ -88,7 +88,6 @@
   }
 }
 
-/* card.tsx reads these tokens to draw the card's art. */
 .cf-host {
   --cf-navy: var(--color-navy);
   --cf-lift: var(--color-navy-medium);
@@ -509,17 +508,16 @@ html:has(.you) {
   inset-inline: var(--rp);
 }
 
-/* In a ghost the tapped row or field is blank, since what replaces it is already on screen. */
-.you .ghost .row.blank > * {
+.you .ghost .row.carried > * {
   visibility: hidden;
 }
 
-.you .ghost .blank {
+.you .ghost .carried {
   color: transparent;
   -webkit-text-fill-color: transparent;
 }
 
-.you .ghost .blank::placeholder {
+.you .ghost .carried::placeholder {
   color: transparent;
 }
 
@@ -611,7 +609,6 @@ html:has(.you) {
   padding-inline: 0;
 }
 
-/* The career half not being edited keeps its rows, pulled out by their padding so the words line up with the fields. */
 .you .grp.open .sub.off .row {
   width: calc(100% + 2 * var(--rp));
   margin-inline: calc(-1 * var(--rp));
@@ -629,7 +626,6 @@ html:has(.you) {
   --spacing-field-pad: var(--fp);
 }
 
-/* Fields are the same solid navy on the lifted panel as on the page. */
 .you .grp.open .ed :is(input:not([type="file"]), select, .prefixed) {
   background-color: color-mix(in srgb, var(--color-navy) 45%, var(--color-blue-bright));
 }
@@ -1147,7 +1143,6 @@ html:has(.you) {
     font-size: var(--text-fine);
   }
 
-  /* Answer groups sit a little closer, so Your background's four questions fit one screen at 390. */
   .you .f.tall + .f.tall {
     margin-top: 20px;
   }
@@ -1156,7 +1151,6 @@ html:has(.you) {
     gap: 8px;
   }
 
-  /* Narrow enough that Yes, No and Prefer not to answer still share one line from 375px. */
   .you .chip {
     padding-inline: 14px;
   }
@@ -1350,7 +1344,6 @@ html:has(.you) {
     color: HighlightText;
   }
 
-  /* The card is art, so it keeps its own cream on navy in every theme. */
   .cf {
     forced-color-adjust: none;
   }

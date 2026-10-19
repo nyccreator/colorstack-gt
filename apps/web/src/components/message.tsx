@@ -40,15 +40,12 @@ export function Message({
     );
   }
 
-  // The words rise rather than the line, so a scroll that measures the message as it appears isn't thrown off.
   return (
-    <p
-      id={id}
-      role={role}
-      className={`mt-4 flex items-baseline gap-2 text-message ${color} ${className}`}
-    >
-      {tone === "error" ? <ErrorBadge className="animate-note" /> : null}
-      <span className="animate-note text-pretty">{children}</span>
+    <p id={id} role={role} className={`mt-4 text-message ${color} ${className}`}>
+      <span className="animate-note flex items-baseline gap-2">
+        {tone === "error" ? <ErrorBadge /> : null}
+        <span className="text-pretty">{children}</span>
+      </span>
     </p>
   );
 }

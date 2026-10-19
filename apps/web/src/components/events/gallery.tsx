@@ -5,6 +5,13 @@ import { Actions, monthOf, Picture, SHORT, tileShape } from "./detail";
 
 const CAPTION_WIDTH = 136;
 
+export function remeasure(els: Element | Iterable<Element>, measure: () => void) {
+  measure();
+  const watch = new ResizeObserver(measure);
+  for (const el of els instanceof Element ? [els] : els) watch.observe(el);
+  return () => watch.disconnect();
+}
+
 function Tile({
   event,
   w,
@@ -37,7 +44,7 @@ function Tile({
         aria-current={on || undefined}
         onClick={pick}
       >
-        <Picture event={event} width={w} height={h}>
+        <Picture event={event} width={w} height={h} lazy>
           {tag ? <span className="nextup">Next up</span> : null}
         </Picture>
       </a>
@@ -118,26 +125,20 @@ export function Gallery({
   selected?: ClubEvent;
   onPick: (id: string) => void;
 }) {
-  const caps = useRef<HTMLDivElement>(null);
-  const [need, setNeed] = useState<Record<string, number>>({});
-  // A hidden copy of each caption's date and buttons gives the width it needs, so a late font refits too.
+  const captionRuler = useRef<HTMLDivElement>(null);
+  const [captionWidths, setCaptionWidths] = useState<Record<string, number>>({});
   useLayoutEffect(() => {
-    const box = caps.current!;
-    const measure = () => {
+    const box = captionRuler.current!;
+    return remeasure(box.children, () => {
       const next = Object.fromEntries(
         events.map((e, i) => [e.id, Math.ceil(box.children[i]!.getBoundingClientRect().width)]),
       );
-      setNeed((old) => (events.every((e) => old[e.id] === next[e.id]) ? old : next));
-    };
-    measure();
-    const watch = new ResizeObserver(measure);
-    for (const c of box.children) watch.observe(c);
-    return () => watch.disconnect();
+      setCaptionWidths((old) => (events.every((e) => old[e.id] === next[e.id]) ? old : next));
+    });
   }, [events]);
   const { width, gap, row, phone } = grid;
-  // A flier narrower than its caption is cropped to the caption, and one wider than the gallery to the gallery.
   const wide = (e: ClubEvent) =>
-    Math.min(width, Math.max(need[e.id] ?? CAPTION_WIDTH, row * tileShape(e)));
+    Math.min(width, Math.max(captionWidths[e.id] ?? CAPTION_WIDTH, row * tileShape(e)));
 
   const tile = (e: ClubEvent) => (
     <Tile
@@ -192,7 +193,7 @@ export function Gallery({
 
   return (
     <>
-      <div ref={caps} className="caps">
+      <div ref={captionRuler} className="caps">
         {events.map((e) => (
           <div key={e.id} className="cap">
             <span className="meta">{SHORT.format(e.startsAt)}</span>

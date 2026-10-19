@@ -62,6 +62,18 @@ export function cue(el: Element, onGone: () => void, delay = 0) {
   return () => clearTimeout(timer);
 }
 
+// iPhone Safari paints a newly opened dialog's first frame before it draws the flier's image, so the animations wait at
+// their start until that frame is drawn.
+export function playAfterFirstFrame(animations: Animation[], onStart: () => boolean) {
+  for (const a of animations) a.pause();
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      if (!onStart()) return;
+      for (const a of animations) a.play();
+    }),
+  );
+}
+
 export function slide(el: Element, enter: boolean, dir = 1) {
   const calm = still();
   const away =

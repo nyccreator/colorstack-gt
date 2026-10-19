@@ -145,7 +145,6 @@ export default defineSchema({
     tasksDone: v.array(task),
   }).index("by_userId", ["userId"]),
 
-  /** Separate from members so no ordinary member query can return it. */
   demographics: defineTable({
     ...demographicAnswers,
     memberId: v.id("members"),

@@ -1,11 +1,10 @@
 import { api } from "@colorstack-gt/backend/convex/_generated/api";
 import { type AnyRouter, type ParsedLocation, redirect } from "@tanstack/react-router";
 import type { ConvexReactClient } from "convex/react";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { authClient } from "./auth-client";
 
-// The token is fetched once per page load, so signing in or out must call forgetSession.
 let cached: Promise<string | undefined> | null = null;
 let seeded = false;
 let seed: string | null = null;
@@ -19,8 +18,7 @@ export function sessionToken(load: () => Promise<string | undefined>) {
   return cached;
 }
 
-// Only the first render seeds the cache, so a later render can't restore a token forgetSession just dropped.
-export function knowSession(token: string | undefined) {
+export function seedSessionOnce(token: string | undefined) {
   if (typeof window === "undefined" || seeded) return;
   seeded = true;
   cached ??= Promise.resolve(token);
@@ -82,15 +80,10 @@ export function useAuth(): Auth {
   });
   const inFlight = useRef<Promise<string | null> | null>(null);
   const sessionId = session?.session.id;
-
-  useEffect(() => {
-    // oxlint-disable-next-line react/set-state-in-effect -- Drops the token once the session is gone.
-    if (!session && !isPending && token) setToken(null);
-  }, [session, isPending, token]);
+  if (!session && !isPending && token) setToken(null);
 
   const fetchAccessToken = useCallback(
     async ({ forceRefreshToken }: { forceRefreshToken: boolean }) => {
-      // oxlint-disable-next-line react-hooks/exhaustive-deps -- A fresh token must not change the identity, which restarts Convex's auth.
       if (token && !forceRefreshToken) return token;
       if (inFlight.current && !forceRefreshToken) return inFlight.current;
       const fetching = authClient.convex
@@ -123,8 +116,10 @@ export function useAuth(): Auth {
   );
 }
 
-// Watching onboarding's two queries before navigating lets its first screen arrive with data instead of a blank page.
-function awaitMember(convex: ConvexReactClient) {
+const MEMBER_WAIT = 4000;
+const MEMBER_WATCH = 10_000;
+
+function preloadMember(convex: ConvexReactClient) {
   const watches = [
     convex.watchQuery(api.members.me),
     convex.watchQuery(api.members.myDemographics),
@@ -141,15 +136,23 @@ function awaitMember(convex: ConvexReactClient) {
   return new Promise<void>((resolve) => {
     const stops = watches.map((watch) => watch.onUpdate(() => ready() && resolve()));
     if (ready()) resolve();
-    setTimeout(resolve, 4000);
-    setTimeout(() => stops.forEach((stop) => stop()), 10_000);
+    setTimeout(resolve, MEMBER_WAIT);
+    setTimeout(() => stops.forEach((stop) => stop()), MEMBER_WATCH);
   });
 }
 
-export async function signedIn(router: AnyRouter, convex: ConvexReactClient) {
-  forgetSession();
-  await router.invalidate();
-  await awaitMember(convex);
+export async function signIn(
+  router: AnyRouter,
+  convex: ConvexReactClient,
+  credentials: { email: string; otp: string },
+) {
+  const result = await authClient.signIn.emailOtp(credentials).catch(() => null);
+  if (result && !result.error) {
+    forgetSession();
+    await router.invalidate();
+    await preloadMember(convex);
+  }
+  return result;
 }
 
 export async function signOut(router: AnyRouter) {

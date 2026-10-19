@@ -36,33 +36,30 @@ const number = (value: string, fallback: number) => {
 const tilt = (el: HTMLElement) =>
   Math.sign(number(getComputedStyle(el).getPropertyValue("--r"), 0));
 
-// An iPhone gives an icon a layer of its own when an animation starts on it and draws that layer frames late, so a
-// swap blanked the pill; icons are moved from script instead and paint with their scene in the same frame.
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
-const STEPS = 120;
-// Each easing is sampled once by the browser and read from the table after, so a frame never touches an Animation.
-const curve = (easing: string) => {
+const EASING_SAMPLES = 120;
+const cssEasing = (easing: string) => {
   let table: number[] | undefined;
   return (x: number) => {
     if (!table) {
       const clock = new Animation(
         new KeyframeEffect(null, null, { duration: 1, easing, fill: "both" }),
       );
-      table = Array.from({ length: STEPS + 1 }, (_, i) => {
-        clock.currentTime = i / STEPS;
-        return clock.effect?.getComputedTiming().progress ?? i / STEPS;
+      table = Array.from({ length: EASING_SAMPLES + 1 }, (_, i) => {
+        clock.currentTime = i / EASING_SAMPLES;
+        return clock.effect?.getComputedTiming().progress ?? i / EASING_SAMPLES;
       });
       clock.cancel();
     }
-    const at = Math.min(1, Math.max(0, x)) * STEPS;
-    const i = Math.min(STEPS - 1, Math.floor(at));
+    const at = Math.min(1, Math.max(0, x)) * EASING_SAMPLES;
+    const i = Math.min(EASING_SAMPLES - 1, Math.floor(at));
     return lerp(table[i]!, table[i + 1]!, at - i);
   };
 };
-const pop = curve(POP);
-const settle = curve(SETTLE);
-const out = curve(OUT);
-const shrink = curve(SHRINK);
+const pop = cssEasing(POP);
+const settle = cssEasing(SETTLE);
+const out = cssEasing(OUT);
+const shrink = cssEasing(SHRINK);
 
 const frames = new WeakMap<HTMLElement, number>();
 
@@ -71,6 +68,7 @@ function halt(el: HTMLElement) {
   frames.delete(el);
 }
 
+// Icons move from script, not an animation, because iPhone Safari gives an animating element a layer that paints frames late.
 function play(el: HTMLElement, ms: number, draw: (at: number) => void, done: () => void) {
   halt(el);
   const t0 = performance.now();

@@ -28,14 +28,13 @@ function settings(no: number) {
   };
 }
 
-// Capping each lobe's slope stops the inner rings catching the light together and drawing spokes.
 function relief(s: ReturnType<typeof settings>) {
   const count = 33,
     inner = 10,
     gap = 6.5,
     grow = 0.3,
     amp = 5.5,
-    steep = 40,
+    maxSlopeDeg = 40,
     square = 0.08,
     wide = 0.03,
     sx = 1.25;
@@ -43,6 +42,8 @@ function relief(s: ReturnType<typeof settings>) {
     P = s.lobes * n,
     lift = 3 / (2 + Math.cos(TAU / n)),
     M = 8;
+  const maxAmpForSlope = (R: number) =>
+    (Math.tan((maxSlopeDeg * Math.PI) / 180) * R) / (lift * s.lobes * (1 + s.beat));
   const off = (q: number[]) =>
     Math.max(q[0]!, q[2]!, q[4]!, q[6]!) < -M ||
     Math.min(q[0]!, q[2]!, q[4]!, q[6]!) > W + M ||
@@ -55,10 +56,7 @@ function relief(s: ReturnType<typeof settings>) {
     const t = Math.min(i / 23, 1.4);
     const R = inner + gap * (i + (grow * i * i) / (2 * Math.max(1, count - 1)));
     const ph = s.phase + i * s.twist;
-    const a0 = Math.min(
-      amp,
-      (Math.tan((steep * Math.PI) / 180) * R) / (lift * s.lobes * (1 + s.beat)),
-    );
+    const a0 = Math.min(amp, maxAmpForSlope(R));
     const pts: [number, number][] = [];
     for (let k = 0; k < P; k++) {
       const a = (k / P) * TAU;
@@ -95,9 +93,8 @@ function relief(s: ReturnType<typeof settings>) {
   return out;
 }
 
-// Every gradient and RELIEF.az assume this one light, so move them together.
-const KEY = { x: 26, y: 0, rx: 506, ry: 318 };
-const REACH = { ...KEY, ry: 250 };
+const LIGHT = { x: 26, y: 0, rx: 506, ry: 318, azimuth: 225 };
+const REACH = { ...LIGHT, ry: 250 };
 const SPARKLE: Stops = [
   [0, 1],
   [0.35, 0.5],
@@ -124,10 +121,10 @@ const FADE: Stops = [
   [0.42, 0.3],
   [0.66, 1],
 ];
-const RELIEF = { az: 225, el: 50, depth: 2.4, blur: 0.7, w: 1.2, tail: 5 };
+const RELIEF = { el: 50, depth: 2.4, blur: 0.7, w: 1.2, tail: 5 };
 const NOISE = 7.13;
 
-const radial = (id: string, color: string, stops: Stops, k = KEY) =>
+const radial = (id: string, color: string, stops: Stops, k = LIGHT) =>
   `<radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1" gradientTransform="translate(${k.x} ${k.y}) scale(${k.rx} ${k.ry})">${stops.map(([o, a]) => `<stop offset="${o}" stop-color="${color}" stop-opacity="${a}"/>`).join("")}</radialGradient>`;
 const rect = (fill: string, extra = "") =>
   `<rect x="-8" y="-8" width="${W + 16}" height="${H + 16}" fill="${fill}"${extra}/>`;
@@ -150,7 +147,7 @@ function art(no: number, C: Palette) {
   const fade = `<linearGradient id="${id}x" gradientUnits="userSpaceOnUse" x1="0" x2="${W}" y1="0" y2="0">${FADE.map(([o, a]) => `<stop offset="${o}" stop-color="white" stop-opacity="${a}"/>`).join("")}</linearGradient>`;
   const area = `filterUnits="userSpaceOnUse" x="-8" y="-8" width="${W + 16}" height="${H + 16}" color-interpolation-filters="sRGB"`;
   const eng = (fid: string, matrix: string) =>
-    `<filter id="${fid}" ${area}><feGaussianBlur in="SourceAlpha" stdDeviation="${R.blur}"/><feDiffuseLighting surfaceScale="${-R.depth}" diffuseConstant="1" lighting-color="white"><feDistantLight azimuth="${R.az}" elevation="${R.el}"/></feDiffuseLighting><feColorMatrix values="${matrix}"/></filter>`;
+    `<filter id="${fid}" ${area}><feGaussianBlur in="SourceAlpha" stdDeviation="${R.blur}"/><feDiffuseLighting surfaceScale="${-R.depth}" diffuseConstant="1" lighting-color="white"><feDistantLight azimuth="${LIGHT.azimuth}" elevation="${R.el}"/></feDiffuseLighting><feColorMatrix values="${matrix}"/></filter>`;
   const cut = `<use href="#${id}R" stroke="white" stroke-width="${R.w}"/>`;
   const rings = relief(s);
   const depth = (i: number) => Math.min(1, (rings.length - i) / (R.tail + 1));
@@ -211,7 +208,6 @@ function tilt(wrap: HTMLElement) {
   sheen.style.willChange = "transform, opacity";
   let raf = 0;
   let last = 0;
-  // Only transforms and opacity change, written straight onto their elements, so the ring art is never redrawn.
   const paint = () => {
     const [x, y, h] = [s.tx[0]!, s.ty[0]!, s.h[0]!];
     card.style.transform = `translateY(${-3 * h}px) rotateX(${-5 * y}deg) rotateY(${5 * x}deg)`;
@@ -270,7 +266,6 @@ export function MemberCard({ me }: { me: Pick<Profile, "gtEmail" | "name" | "joi
     ? new Date(me.joinedAt).toLocaleDateString("en-US", { month: "long", year: "numeric" })
     : "";
 
-  // The art depends only on the seed, so a name or date change rewrites the face's text and nothing else.
   useEffect(() => {
     const el = host.current;
     if (!el) return;

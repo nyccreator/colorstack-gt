@@ -50,9 +50,13 @@ export function summary(me: Profile, group: Group) {
   }
 }
 
-// A short last part such as "com" stays joined to the one before it.
+const SHORT_TAIL = 6;
+const joinShortTail = (parts: string[]) =>
+  parts.length > 1 && parts.at(-1)!.length < SHORT_TAIL
+    ? [...parts.slice(0, -2), parts.slice(-2).join("")]
+    : parts;
+
 export function breaks(text: string): ReactNode[] {
-  const parts = text.split(/(?<=[@./])/);
-  if (parts.length > 1 && parts.at(-1)!.length < 6) parts.splice(-2, 2, parts.slice(-2).join(""));
+  const parts = joinShortTail(text.split(/(?<=[@./])/));
   return parts.flatMap((part, i) => (i ? [createElement("wbr", { key: i }), part] : [part]));
 }

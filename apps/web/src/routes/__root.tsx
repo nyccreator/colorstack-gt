@@ -10,7 +10,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { ConvexProviderWithAuth, type ConvexReactClient } from "convex/react";
 
 import { getToken } from "@/lib/auth-server";
-import { knowSession, sessionToken, useAuth } from "@/lib/session";
+import { seedSessionOnce, sessionToken, useAuth } from "@/lib/session";
 
 import appCss from "../index.css?url";
 
@@ -50,7 +50,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 
 function RootDocument() {
   const context = useRouteContext({ from: Route.id });
-  knowSession(context.token);
+  seedSessionOnce(context.token);
   return (
     <ConvexProviderWithAuth client={context.convex} useAuth={useAuth}>
       <html lang="en">

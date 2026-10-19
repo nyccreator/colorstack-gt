@@ -12,6 +12,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -61,8 +62,7 @@ const BOOK = [
   { value: "in", label: "Included" },
   { value: "out", label: "Not included" },
 ] as const;
-// These are each destination's official logos and stay unaltered.
-const SHORT = {
+const STAY_LINKS = {
   national: { label: "National", logo: "/assets/logos/colorstack-national.png" },
   whatsapp: { label: "WhatsApp", logo: "/assets/logos/whatsapp.svg" },
   instagram: { label: "Instagram", logo: "/assets/logos/instagram.png" },
@@ -248,26 +248,25 @@ export function YouPage({ me, answers }: { me: Profile; answers: Answers | null 
   const save = useSave();
   const removeResume = useMutation(api.members.removeResume);
   const root = useRef<HTMLDivElement>(null);
-  const latest = useRef({ me, answers, save });
-  // oxlint-disable-next-line react/refs -- The controller's callbacks must read the newest props, and its state is not React's.
-  latest.current = { me, answers, save };
-  // oxlint-disable-next-line react/refs -- The controller's callbacks read the ref later, never during render.
   const [controller] = useState(() =>
-    createEditing({
-      rows: (group) => GROUP[group].rows(latest.current.me),
+    createEditing({ me, answers, save }, (latest) => ({
+      rows: (group) => GROUP[group].rows(latest().me),
       editors: EDITORS,
-      draft: () => draftFrom(latest.current.me, latest.current.answers),
-      save: (editor, d) => latest.current.save(GROUP_OF[editor], d, latest.current.me),
+      draft: () => draftFrom(latest().me, latest().answers),
+      save: (editor, d) => latest().save(GROUP_OF[editor], d, latest().me),
       setBook: (on) => {
-        const { me, answers, save } = latest.current;
+        const { me, answers, save } = latest();
         return save("materials", { ...draftFrom(me, answers), resumeBook: on }, me);
       },
       upload: uploadResume,
       removeResume,
-      resume: () => latest.current.me.resume,
-      inBook: () => Boolean(latest.current.me.resume && latest.current.me.materials?.resumeBook),
-    }),
+      resume: () => latest().me.resume,
+      inBook: () => Boolean(latest().me.resume && latest().me.materials?.resumeBook),
+    })),
   );
+  useLayoutEffect(() => {
+    controller.update({ me, answers, save });
+  });
   useSyncExternalStore(controller.subscribe, controller.version, () => 0);
   const { ed, res, lastOpen } = controller.state();
 
@@ -294,9 +293,13 @@ export function YouPage({ me, answers }: { me: Profile; answers: Answers | null 
                 Stay connected
               </h2>
               <ul className="links" aria-labelledby="stay-h">
-                {(Object.keys(SHORT) as (keyof typeof SHORT)[]).map((task) => (
+                {(Object.keys(STAY_LINKS) as (keyof typeof STAY_LINKS)[]).map((task) => (
                   <li key={task}>
-                    <TaskLink task={task} logo={SHORT[task].logo} short={SHORT[task].label} />
+                    <TaskLink
+                      task={task}
+                      logo={STAY_LINKS[task].logo}
+                      short={STAY_LINKS[task].label}
+                    />
                   </li>
                 ))}
               </ul>

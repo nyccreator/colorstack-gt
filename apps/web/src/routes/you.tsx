@@ -12,7 +12,6 @@ export const Route = createFileRoute("/you")({
 });
 
 function You() {
-  // The private answers arrive before the page, so Your background never opens empty.
   const member = useMember("roster");
 
   if (member.status !== "ready") {

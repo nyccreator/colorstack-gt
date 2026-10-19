@@ -8,5 +8,5 @@
   "env": {
     "builtin": true
   },
-  "ignorePatterns": [".claude/**"]
+  "ignorePatterns": [".claude/**", "packages/backend/convex/_generated/**"]
 }

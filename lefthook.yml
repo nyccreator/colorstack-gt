@@ -6,7 +6,7 @@ pre-commit:
   jobs:
     - name: oxlint
       glob: "*.{js,jsx,mjs,cjs,ts,tsx}"
-      run: bun oxlint --fix {staged_files}
+      run: bun oxlint --fix --report-unused-disable-directives-severity=error {staged_files}
       stage_fixed: true
     - name: oxfmt
       glob: "*.{js,jsx,mjs,cjs,ts,tsx}"

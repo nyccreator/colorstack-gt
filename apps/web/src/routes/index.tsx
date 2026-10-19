@@ -133,10 +133,16 @@ const PLAN = [
 
 const LIFT = 22;
 const SETTLE_PX = 8;
+const DRAG_PX = 10;
 const SETTLES = Math.max(...PLAN.map((part) => ("split" in part ? part.split : part.enter))) + 1;
 
 const clamp01 = (value: number) => (value < 0 ? 0 : value > 1 ? 1 : value);
 const step = (progress: number, to: number) => clamp01(progress - (to - 1));
+const toDevicePixels = (px: number) => Math.round(px * devicePixelRatio) / devicePixelRatio;
+const holdNearStops = (raw: number, edge: number) => {
+  const base = Math.floor(raw);
+  return base + clamp01((raw - base - edge) / (1 - 2 * edge));
+};
 
 const tones = new Map<string, { luma: number; clear: boolean }>();
 let swatch: CanvasRenderingContext2D | null | undefined;
@@ -212,7 +218,7 @@ function useStage(root: RefObject<HTMLDivElement | null>) {
     };
 
     const handed = new Map<string, number>();
-    let held: number | null = null;
+    let heldStop: number | null = null;
     const draw = () => {
       if (still.matches) {
         for (const scene of scenes) {
@@ -224,26 +230,17 @@ function useStage(root: RefObject<HTMLDivElement | null>) {
         return;
       }
       const unit = stride();
-      const raw = held ?? window.scrollY / unit;
-      // The last pixels of a snap settling into a stop leave the scenes at rest, so nothing redraws while the phone
-      // eases in; between those edges the scenes move a touch faster and still land exactly on each stop.
-      const base = Math.floor(raw);
-      const edge = SETTLE_PX / unit;
-      const progress = base + clamp01((raw - base - edge) / (1 - 2 * edge));
+      const raw = heldStop ?? window.scrollY / unit;
+      const progress = holdNearStops(raw, SETTLE_PX / unit);
       const moved: { el: HTMLElement; name: string; t: number }[] = [];
       const height = stage.clientHeight;
       for (const scene of scenes) {
         if (!scene.el) continue;
         const into = scene.enter === 0 ? 1 : step(progress, scene.enter);
         const out = "exit" in scene ? step(progress, scene.exit) : 0;
-        // A covered scene leaves the screen, so nothing laid over its fields, such as a password manager's icon,
-        // shows through the scene on top.
-        const y = out === 1 ? -height : (((1 - into) * 100 - out * LIFT) / 100) * height;
-        // Scenes move by whole device pixels, so a tilted icon isn't redrawn at a new fraction against its words.
-        scene.el.style.setProperty(
-          "--y",
-          `${Math.round(y * devicePixelRatio) / devicePixelRatio}px`,
-        );
+        const covered = out === 1;
+        const y = covered ? -height : (((1 - into) * 100 - out * LIFT) / 100) * height;
+        scene.el.style.setProperty("--y", `${toDevicePixels(y)}px`);
         if ("split" in scene) {
           const t = step(progress, scene.split);
           scene.el.style.setProperty("--t", t.toFixed(4));
@@ -274,58 +271,57 @@ function useStage(root: RefObject<HTMLDivElement | null>) {
       draw();
     };
 
-    // A click or tap focuses what is already on screen, so only keyboard focus moves the page to a scene's rest.
-    let pointing = false;
-    const onPointer = () => (pointing = true);
-    const onKey = () => (pointing = false);
-    const scrollToFocusedScene = (event: FocusEvent) => {
-      if (still.matches || pointing) return;
+    let pointerFocus = false;
+    const onPointer = () => (pointerFocus = true);
+    const onKey = () => (pointerFocus = false);
+    const followKeyboardFocus = (event: FocusEvent) => {
+      if (still.matches || pointerFocus) return;
       const scene = scenes.find((part) => part.el?.contains(event.target as Node));
       if (!scene) return;
       const y = ("rest" in scene ? scene.rest : scene.enter) * stride();
       if (Math.abs(window.scrollY - y) > 1) window.scrollTo({ top: y, behavior: "instant" });
     };
 
-    // A phone's keyboard reveals its field by scrolling the page, which the stage would play as the story moving
-    // on, so the stage leaves its sticky frame at its stop, the page ends with it, and the scenes hold there until
-    // the field is left.
-    // Leaving the field by tapping Join blurs it before the tap lands, so the scene waits for the tap to finish.
-    let release = 0;
-    const onFocusIn = (event: FocusEvent) => {
-      if (still.matches || !coarse.matches || !(event.target as Element).matches("input")) {
-        scrollToFocusedScene(event);
-        return;
-      }
-      clearTimeout(release);
-      if (held !== null) return;
+    const holdStage = () => {
       const unit = stride();
-      held = Math.round(window.scrollY / unit);
-      const top = held * unit;
+      heldStop = Math.round(window.scrollY / unit);
+      const top = heldStop * unit;
       stage.style.top = `${top}px`;
       shell.style.height = `${top + stage.offsetHeight}px`;
       landing.classList.add("typing");
     };
+    const releaseStage = (top: number) => {
+      heldStop = null;
+      stage.style.removeProperty("top");
+      shell.style.removeProperty("height");
+      landing.classList.remove("typing");
+      window.scrollTo({ top, behavior: "instant" });
+    };
+    const afterTap = (fn: () => void) => window.setTimeout(fn);
+
+    let release = 0;
+    const onFocusIn = (event: FocusEvent) => {
+      if (still.matches || !coarse.matches || !(event.target as Element).matches("input")) {
+        followKeyboardFocus(event);
+        return;
+      }
+      clearTimeout(release);
+      if (heldStop !== null) return;
+      holdStage();
+    };
     const onFocusOut = () => {
-      if (held === null) return;
+      if (heldStop === null) return;
       const top = parseFloat(stage.style.top);
-      release = window.setTimeout(() => {
-        held = null;
-        stage.style.removeProperty("top");
-        shell.style.removeProperty("height");
-        landing.classList.remove("typing");
-        window.scrollTo({ top, behavior: "instant" });
-      });
+      release = afterTap(() => releaseStage(top));
     };
 
-    // A phone lets the page scroll past its end while the keyboard is up, so dragging the page closes the keyboard
-    // and the story scrolls on instead.
     let dragFrom: number | null = null;
-    const onTouchStart = (event: TouchEvent) => {
+    const armDismissKeyboardOnDrag = (event: TouchEvent) => {
       const from = event.target as Element;
-      dragFrom = held !== null && !from.closest("input") ? event.touches[0]!.clientY : null;
+      dragFrom = heldStop !== null && !from.closest("input") ? event.touches[0]!.clientY : null;
     };
-    const onTouchMove = (event: TouchEvent) => {
-      if (dragFrom === null || Math.abs(event.touches[0]!.clientY - dragFrom) < 10) return;
+    const dismissKeyboardOnDrag = (event: TouchEvent) => {
+      if (dragFrom === null || Math.abs(event.touches[0]!.clientY - dragFrom) < DRAG_PX) return;
       dragFrom = null;
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     };
@@ -337,8 +333,8 @@ function useStage(root: RefObject<HTMLDivElement | null>) {
     addEventListener("keydown", onKey, true);
     stage.addEventListener("focusin", onFocusIn);
     stage.addEventListener("focusout", onFocusOut);
-    addEventListener("touchstart", onTouchStart, { passive: true });
-    addEventListener("touchmove", onTouchMove, { passive: true });
+    addEventListener("touchstart", armDismissKeyboardOnDrag, { passive: true });
+    addEventListener("touchmove", dismissKeyboardOnDrag, { passive: true });
     still.addEventListener("change", onMotion);
     return () => {
       cancelAnimationFrame(frame);
@@ -350,8 +346,8 @@ function useStage(root: RefObject<HTMLDivElement | null>) {
       removeEventListener("keydown", onKey, true);
       stage.removeEventListener("focusin", onFocusIn);
       stage.removeEventListener("focusout", onFocusOut);
-      removeEventListener("touchstart", onTouchStart);
-      removeEventListener("touchmove", onTouchMove);
+      removeEventListener("touchstart", armDismissKeyboardOnDrag);
+      removeEventListener("touchmove", dismissKeyboardOnDrag);
       still.removeEventListener("change", onMotion);
     };
   }, [root]);

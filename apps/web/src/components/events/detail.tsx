@@ -41,7 +41,6 @@ const dayNo = (t: number) =>
 export const monthOf = (t: number, now: number) =>
   YEAR.format(t) === YEAR.format(now) ? MONTH.format(t) : `${MONTH.format(t)} ${YEAR.format(t)}`;
 
-// "This" and "Next" before a weekday are ambiguous, so the copy never uses them.
 export function away(e: ClubEvent, now: number) {
   const days = dayNo(e.startsAt) - dayNo(now);
   if (days <= 0) return "Today";
@@ -105,13 +104,13 @@ export function Picture({
   event,
   width,
   height,
-  eager,
+  lazy,
   children,
 }: {
   event: Look;
   width: number;
   height: number;
-  eager?: boolean;
+  lazy?: boolean;
   children?: ReactNode;
 }) {
   return (
@@ -125,7 +124,7 @@ export function Picture({
           src={event.flier.src}
           width={event.flier.width}
           height={event.flier.height}
-          loading={eager ? "eager" : "lazy"}
+          loading={lazy ? "lazy" : "eager"}
           decoding="async"
           alt=""
         />
@@ -162,25 +161,23 @@ const TYPE_FLOOR = 0.88;
 const WIDTH_FLOOR = 0.72;
 const STEP = 0.02;
 
-// Every measure lays out each event's details, and no part of a stack shrinks faster than its width, so a step more
-// than one above room / full-size height can't fit and is skipped.
 export function fitStack(probe: HTMLElement, shapes: number[], widest: number, room: number): Fit {
+  const tallestAt = (width: number, t: number) => {
+    probe.style.width = `${width}px`;
+    probe.style.setProperty("--t", String(t));
+    return Math.max(
+      ...Array.from(probe.children, (c, i) => (c as HTMLElement).offsetHeight + width / shapes[i]!),
+    );
+  };
   let k = 1;
-  let reach = 1;
+  let couldFitAtMost = 1;
   for (;;) {
     const width = Math.floor(widest * k);
     const t = Math.max(TYPE_FLOOR, k);
-    if (k <= reach || k <= WIDTH_FLOOR) {
-      probe.style.width = `${width}px`;
-      probe.style.setProperty("--t", String(t));
-      const tallest = Math.max(
-        ...Array.from(
-          probe.children,
-          (c, i) => (c as HTMLElement).offsetHeight + width / shapes[i]!,
-        ),
-      );
+    if (k <= couldFitAtMost || k <= WIDTH_FLOOR) {
+      const tallest = tallestAt(width, t);
       if (tallest <= room || k <= WIDTH_FLOOR) return { width, t };
-      if (k === 1) reach = room / tallest + STEP;
+      if (k === 1) couldFitAtMost = room / tallest + STEP;
     }
     k = Math.max(WIDTH_FLOOR, k - STEP);
   }
@@ -281,7 +278,7 @@ function Add({ event, mode }: { event: ClubEvent; mode: "tile" | "corner" }) {
     const toggled = (e: ToggleEvent) => {
       if (e.newState !== "open") return document.removeEventListener("keydown", escape, true);
       document.addEventListener("keydown", escape, true);
-      // CSS can't tell whether the menu fell back to opening above its button, so the corner it grows from is read here.
+      // Safari can't tell whether the menu fell back to opening above its button, so the corner it grows from is read here.
       const above = m.getBoundingClientRect().top < button.current!.getBoundingClientRect().top;
       m.style.transformOrigin = above ? "right bottom" : "right top";
     };

@@ -31,8 +31,8 @@
     "dev:setup": "turbo run dev:setup -F @colorstack-gt/backend --",
     "deploy": "turbo run deploy -F @colorstack-gt/infra --",
     "destroy": "turbo run destroy -F @colorstack-gt/infra --",
-    "check": "oxlint && oxfmt --write",
-    "check:ci": "oxlint && oxfmt --check"
+    "check": "oxlint --report-unused-disable-directives-severity=error && oxfmt --write",
+    "check:ci": "oxlint --report-unused-disable-directives-severity=error && oxfmt --check"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260728.1",

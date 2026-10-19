@@ -1,6 +1,14 @@
-import { type RefObject, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  type RefObject,
+  useEffect,
+  useEffectEvent,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
-import { APPEAR, MOVE, still } from "@/lib/motion";
+import { APPEAR, MOVE, playAfterFirstFrame, still } from "@/lib/motion";
 
 import type { ClubEvent } from "./data";
 import { Actions, Details, type Fit, fitStack, Picture, stackShape } from "./detail";
@@ -22,15 +30,33 @@ function flight(r0: DOMRect, r: DOMRect, round: number): Keyframe {
   };
 }
 
-// A clip on one end only would switch on or off at once, so the other end gets one that clips nothing.
-function ends(a: Keyframe, b: Keyframe) {
-  if (!a.clipPath !== !b.clipPath) (a.clipPath ? b : a).clipPath = "inset(0 0 round 0px)";
+const NO_CLIP = "inset(0 0 round 0px)";
+function clipBothEnds(a: Keyframe, b: Keyframe) {
+  if (!a.clipPath !== !b.clipPath) (a.clipPath ? b : a).clipPath = NO_CLIP;
   return [a, b];
 }
 const radius = (el: Element) => parseFloat(getComputedStyle(el).borderTopLeftRadius);
 const DRAG_START = 8;
-const tileOf = (id: string) =>
+export const tileOf = (id: string) =>
   document.querySelector<HTMLElement>(`.gal [data-event="${CSS.escape(id)}"]`);
+function coverTile(pic: HTMLElement) {
+  pic.style.visibility = "hidden";
+  return () => pic.style.removeProperty("visibility");
+}
+// iPhone Safari leaves the details' text opaque under an opacity animation, so they and the flier's buttons go at
+// once and only the flier flies.
+function hideDetails(inner: HTMLElement) {
+  const parts = inner.querySelectorAll<HTMLElement>(".det, .cor");
+  for (const el of parts) el.style.visibility = "hidden";
+  return () => {
+    for (const el of parts) el.style.removeProperty("visibility");
+  };
+}
+function takeOver(el: HTMLElement) {
+  const y = new DOMMatrix(getComputedStyle(el).transform).m42;
+  el.getAnimations().forEach((a) => a.cancel());
+  return y;
+}
 
 export function View({
   events,
@@ -39,7 +65,7 @@ export function View({
   next,
   probe,
   grow,
-  routed,
+  stayOpen,
   onPage,
   onClose,
   onGone,
@@ -49,8 +75,8 @@ export function View({
   now: number;
   next?: ClubEvent;
   probe: RefObject<HTMLDivElement | null>;
-  grow: boolean;
-  routed: boolean;
+  grow: RefObject<boolean>;
+  stayOpen: boolean;
   onPage: (id: string) => void;
   onClose: () => void;
   onGone: (id: string) => void;
@@ -60,11 +86,11 @@ export function View({
   const ruler = useRef<HTMLDivElement>(null);
   const reel = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState<Fit | null>(null);
+  const [initial] = useState(start);
   const [at, setAt] = useState(start);
   const here = useRef(start);
-  const shown = useRef(false);
   const leaving = useRef(false);
-  const refocus = useRef(false);
+  const focusWasOnOldPage = useRef(false);
   // The router restores scroll by element when the dialog closes, so each dialog names its scrollers afresh rather
   // than take an earlier dialog's positions.
   const scrollId = useId();
@@ -73,6 +99,10 @@ export function View({
     const d = dialog.current!;
     d.showModal();
     d.focus();
+    return () => d.close();
+  }, []);
+
+  useLayoutEffect(() => {
     const measure = () => {
       const page = track.current!.firstElementChild as HTMLElement;
       const cs = getComputedStyle(page);
@@ -81,12 +111,8 @@ export function View({
     };
     measure();
     addEventListener("resize", measure);
-    return () => {
-      removeEventListener("resize", measure);
-      d.close();
-    };
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- The dialog fits once as it mounts and again on resize; the events and probe it was given do not change meanwhile.
-  }, []);
+    return () => removeEventListener("resize", measure);
+  }, [events, probe]);
 
   const edges = () => {
     const r = reel.current;
@@ -106,19 +132,20 @@ export function View({
   };
 
   useLayoutEffect(() => {
-    const t = track.current!;
     if (!fit) return;
+    const t = track.current!;
     t.scrollLeft = here.current * t.clientWidth;
-    if (shown.current) return;
-    shown.current = true;
-    centre(start, false);
-    if (!grow) return;
+  }, [fit]);
+
+  const open = useEffectEvent(() => {
+    centre(initial, false);
+    if (!grow.current) return;
     const d = dialog.current!;
     if (still())
       return void d.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 120, easing: APPEAR });
-    const page = t.children[start] as HTMLElement;
+    const page = track.current!.children[initial] as HTMLElement;
     const p = page.querySelector<HTMLElement>(".pic")!;
-    const from = tileOf(events[start]!.id)?.querySelector<HTMLElement>(".pic");
+    const from = tileOf(events[initial]!.id)?.querySelector<HTMLElement>(".pic");
     const backdrop = { duration: 280, easing: APPEAR };
     const all = [
       d.querySelector(".bg")!.animate([{ opacity: 0 }, { opacity: 1 }], backdrop),
@@ -139,46 +166,40 @@ export function View({
         ),
       ),
     ];
+    let uncover = () => {};
     if (from) {
       const rest = { transform: "none", borderRadius: `${radius(p)}px` };
       const flying = p.animate(
-        ends(flight(p.getBoundingClientRect(), from.getBoundingClientRect(), radius(from)), rest),
+        clipBothEnds(
+          flight(p.getBoundingClientRect(), from.getBoundingClientRect(), radius(from)),
+          rest,
+        ),
         { duration: 420, easing: MOVE },
       );
       all.push(flying);
-      // A close that interrupts the grow lands on this tile and shows it itself.
       const show = () => {
-        if (!leaving.current || here.current !== start) from.style.removeProperty("visibility");
+        if (!leaving.current || here.current !== initial) uncover();
       };
       void flying.finished.then(show, show);
     }
-    // The open's first frame paints the whole dialog and only after it does Safari draw the flier's image, so
-    // everything waits at its start, over the tile, until that frame is drawn.
-    all.forEach((a) => a.pause());
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        if (leaving.current) return;
-        if (from) from.style.visibility = "hidden";
-        all.forEach((a) => a.play());
-      }),
-    );
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- This runs once, when the first fit lands, with the event and flight the dialog opened with.
-  }, [fit]);
+    playAfterFirstFrame(all, () => {
+      if (leaving.current) return false;
+      if (from) uncover = coverTile(from);
+      return true;
+    });
+  });
+  const fitted = fit !== null;
+  useLayoutEffect(() => {
+    if (fitted) open();
+  }, [fitted]);
 
   useEffect(() => centre(at, true), [at]);
 
-  // Paging makes the page that held focus inert, so focus follows to the new page's title.
   useLayoutEffect(() => {
-    if (!refocus.current) return;
-    refocus.current = false;
+    if (!focusWasOnOldPage.current) return;
+    focusWasOnOldPage.current = false;
     track.current?.children[at]?.querySelector<HTMLElement>(".ttl")?.focus({ preventScroll: true });
   }, [at]);
-
-  useEffect(() => {
-    // oxlint-disable-next-line react/immutability -- flyBack is a hoisted function by the time the effect runs.
-    if (!routed) flyBack();
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- The flight starts only when the address stops naming the event.
-  }, [routed]);
 
   const go = (k: number, smooth = true) => {
     const t = track.current!;
@@ -196,7 +217,8 @@ export function View({
     if (k === here.current || leaving.current || !events[k]) return;
     dialog.current?.querySelector<HTMLElement>(":popover-open")?.hidePopover();
     const focus = document.activeElement;
-    refocus.current = focus === dialog.current || !!t.children[here.current]?.contains(focus);
+    focusWasOnOldPage.current =
+      focus === dialog.current || !!t.children[here.current]?.contains(focus);
     here.current = k;
     setAt(k);
     onPage(events[k].id);
@@ -209,8 +231,7 @@ export function View({
     onClose();
   }
 
-  // Close only navigates, so the flight starts once the router has restored the page's scroll and its tile stays put.
-  function flyBack() {
+  const flyBack = useEffectEvent(() => {
     leaving.current = true;
     dialog.current?.querySelector<HTMLElement>(":popover-open")?.hidePopover();
     const k = here.current;
@@ -218,8 +239,9 @@ export function View({
     const tile = tileOf(event.id);
     tile?.scrollIntoView({ block: "nearest", inline: "nearest" });
     const slot = tile?.querySelector<HTMLElement>(".pic");
+    let uncover = () => {};
     const done = () => {
-      slot?.style.removeProperty("visibility");
+      uncover();
       onGone(event.id);
     };
     const d = dialog.current!;
@@ -237,10 +259,7 @@ export function View({
     const was = p.getBoundingClientRect();
     for (const el of [p, inner]) el.getAnimations().forEach((a) => a.cancel());
     const fade = parseFloat(getComputedStyle(bg).opacity);
-    // iPhone Safari leaves the details' text opaque under an opacity animation, so they and the flier's buttons go at
-    // once and only the flier flies.
-    inner.querySelector<HTMLElement>(".det")!.style.visibility = "hidden";
-    inner.querySelector<HTMLElement>(".cor")!.style.visibility = "hidden";
+    hideDetails(inner);
     inner.style.transform = "";
     const r0 = p.getBoundingClientRect();
     const backdrop = { duration: 300, easing: MOVE, fill: "forwards" } as const;
@@ -255,11 +274,10 @@ export function View({
       easing: APPEAR,
       fill: "forwards",
     });
-    // The backdrop clears early, so the tile's own flier hides until this one lands on it.
-    if (slot) slot.style.visibility = "hidden";
+    if (slot) uncover = coverTile(slot);
     const flying = slot
       ? p.animate(
-          ends(
+          clipBothEnds(
             flight(r0, was, radius(p) * (was.height / r0.height)),
             flight(r0, slot.getBoundingClientRect(), radius(slot)),
           ),
@@ -271,10 +289,12 @@ export function View({
           fill: "forwards",
         });
     void flying.finished.then(done, done);
-  }
+  });
+  useEffect(() => {
+    if (!stayOpen) flyBack();
+  }, [stayOpen]);
 
-  // Pulling only starts at a page's top and when the drag is more down than sideways, so scrolling and swiping
-  // still work.
+  const pulled = useEffectEvent(close);
   useEffect(() => {
     const t = track.current!;
     const d = dialog.current!;
@@ -282,7 +302,7 @@ export function View({
     const ctl = d.querySelector<HTMLElement>(".ctl")!;
     const page = () => t.children[here.current] as HTMLElement;
     const inner = () => page().firstElementChild as HTMLElement;
-    const covered = () => inner().querySelectorAll<HTMLElement>(".det, .cor");
+    let showDetails = () => {};
     let y0: number | null = null;
     let x0 = 0;
     let dy = 0;
@@ -306,11 +326,10 @@ export function View({
         if (Math.abs(side) > Math.abs(down) || down < 0 || page().scrollTop > 0)
           return void (y0 = null);
         pulling = true;
-        // A running snap-back outranks the inline style, so the finger takes over from wherever it has got to.
         const el = inner();
-        y0 -= new DOMMatrix(getComputedStyle(el).transform).m42;
-        for (const x of [el, bg, ctl]) x.getAnimations().forEach((a) => a.cancel());
-        covered().forEach((el) => (el.style.visibility = "hidden"));
+        y0 -= takeOver(el);
+        for (const x of [bg, ctl]) x.getAnimations().forEach((a) => a.cancel());
+        showDetails = hideDetails(el);
         last = { dy: clientY - y0, at: performance.now() };
         before = last;
       }
@@ -329,7 +348,7 @@ export function View({
       if (!pulling) return;
       pulling = false;
       const speed = (last.dy - before.dy) / Math.max(1, performance.now() - before.at);
-      if (dy > 110 || speed > 0.11) return close();
+      if (dy > 110 || speed > 0.11) return pulled();
       const el = inner();
       const from = el.style.transform;
       el.style.transform = "";
@@ -339,7 +358,7 @@ export function View({
         x.animate([{ opacity: x.style.opacity }, { opacity: 1 }], { duration: 260, easing: MOVE });
         x.style.opacity = "";
       }
-      covered().forEach((el) => el.style.removeProperty("visibility"));
+      showDetails();
     };
     t.addEventListener("touchstart", begin, { passive: true });
     t.addEventListener("touchmove", move, { passive: false });
@@ -351,7 +370,6 @@ export function View({
       t.removeEventListener("touchend", end);
       t.removeEventListener("touchcancel", end);
     };
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- The swipe listeners attach once, and close is guarded by `leaving` and only navigates.
   }, []);
 
   return (
@@ -390,8 +408,7 @@ export function View({
             <div className="pg-in stk">
               {fit ? (
                 <>
-                  {/* A lazy flier takes the tile's image only frames after the grow has started, so it flies empty. */}
-                  <Picture event={e} width={fit.width} height={fit.width / stackShape(e)} eager>
+                  <Picture event={e} width={fit.width} height={fit.width / stackShape(e)}>
                     <Actions event={e} mode="corner" />
                   </Picture>
                   <Details event={e} now={now} next={e === next} eyebrow />

@@ -130,7 +130,6 @@ export function draftFrom(me: Profile, answers: Answers | null): Draft {
   };
 }
 
-// A pasted profile link becomes its name; typing keeps the member's own text.
 export const typedName = (site: ProfileSite, value: string) => {
   const name = profileName(site, value);
   return name === value.trim() ? value.trimStart() : name;
