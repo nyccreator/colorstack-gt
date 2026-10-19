@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { EventsPage } from "@/components/events/page";
 import { Bar, Waiting } from "@/components/frame";
-import { FirstName, inlineLink, pin } from "@/components/onboarding/controls";
+import { containerTitle, FirstName, inlineLink, pin } from "@/components/onboarding/controls";
 import { TASKS } from "@/components/onboarding/options";
 import { MemberCard } from "@/components/you/card";
 import { type Profile, useMember } from "@/lib/member";
@@ -110,7 +110,7 @@ function Engage({ me }: { me: Profile }) {
         <h1
           ref={title}
           tabIndex={-1}
-          className="@container mt-6 type-display text-title text-balance wrap-break-word hyphens-auto outline-none lg:col-span-2 lg:row-start-1 lg:mt-0 lg:mb-8"
+          className={`${containerTitle} mt-6 lg:col-span-2 lg:row-start-1 lg:mt-0 lg:mb-8`}
         >
           Welcome to <span className="hyphens-none">ColorStack</span>, <FirstName name={first} />
         </h1>

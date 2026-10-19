@@ -16,7 +16,6 @@ type OptionalGroup = (typeof OPTIONAL)[number];
 export const isOptional = (group: Group): group is OptionalGroup =>
   (OPTIONAL as readonly Group[]).includes(group);
 
-/** `members.step` holds the highest group reached, so a skipped optional group still counts as done. */
 export const stepOf = (group: Group): number => GROUPS.indexOf(group) + 1;
 
 export function savedGroups(

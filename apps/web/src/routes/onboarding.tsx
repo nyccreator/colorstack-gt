@@ -34,9 +34,10 @@ import {
 import { TITLES } from "@/components/member/groups";
 import { breaks, summary } from "@/components/member/summary";
 import { BusyLabel, Message } from "@/components/message";
-import { FirstName, pin, Progress, Tick } from "@/components/onboarding/controls";
+import { containerTitle, FirstName, pin, Progress, Tick } from "@/components/onboarding/controls";
 import { Body, QUESTIONS, type Slug, useChecks } from "@/components/onboarding/screens";
 import { type Answers, type Profile, useMember } from "@/lib/member";
+import { focusWithoutKeyboard, TOUCH } from "@/lib/media";
 import { APPEAR, BUSY_AFTER, cue, LABEL_HOLD, slide, still } from "@/lib/motion";
 import { requireSession } from "@/lib/session";
 
@@ -62,7 +63,6 @@ export const Route = createFileRoute("/onboarding")({
   component: Onboarding,
 });
 
-// Every navigation inside onboarding writes this into its history entry, so Back and Forward carry it.
 type Hop = {
   from?: Slug;
   opened?: { group: Group; listIndex: number };
@@ -100,6 +100,13 @@ const COUNT = [
 
 const TYPED: ReadonlySet<Slug> = new Set(["name", "contact", "major", "career"]);
 const BEAT = 350;
+const DOUBLE_TAP_MS = 120;
+const FAINT = 0.1;
+
+function swallowDoubleTap(el: HTMLElement | null) {
+  if (el) el.style.pointerEvents = "none";
+  return setTimeout(() => el && (el.style.pointerEvents = ""), DOUBLE_TAP_MS);
+}
 
 type Arrival = { dir: number; group?: Group };
 const isText = (el: unknown): el is HTMLInputElement =>
@@ -268,11 +275,7 @@ function Welcome({
           label={`${answered} of ${QUESTIONS.length} questions answered`}
         />
         <div ref={box}>
-          <h1
-            ref={title}
-            tabIndex={-1}
-            className="@container type-display text-title text-balance wrap-break-word hyphens-auto outline-none"
-          >
+          <h1 ref={title} tabIndex={-1} className={containerTitle}>
             {review ? (
               "Your answers"
             ) : gated ? (
@@ -371,7 +374,7 @@ function Ask({
   set,
   at,
   from,
-  box,
+  boxRef,
   locked,
   settle,
   edit,
@@ -385,7 +388,7 @@ function Ask({
   set: (patch: Partial<Draft>) => void;
   at: number;
   from: number;
-  box: RefObject<HTMLDivElement | null>;
+  boxRef: RefObject<HTMLDivElement | null>;
   locked: () => boolean;
   settle: () => void;
   edit: boolean;
@@ -403,7 +406,6 @@ function Ask({
   const [pending, setPending] = useState(false);
   const [slow, setSlow] = useState(false);
   const [upload, setUpload] = useState<Promise<boolean> | null>(null);
-  // Pressing on during an upload waits for it under Saving… and stays on this question if it fails.
   async function afterUpload() {
     if (!upload) return true;
     setPending(true);
@@ -449,7 +451,6 @@ function Ask({
       return setProblem(failureText(failure));
     }
     clearTimeout(shown);
-    // If browser Back unmounted this question while it saved, the member stays where they went.
     if (!alive.current) return;
     const following = QUESTIONS[at + 1];
     if (following && !edit) await go(following.slug);
@@ -490,6 +491,7 @@ function Ask({
 
   const section = QUESTIONS.filter((x) => x.group === question.group);
   const before = QUESTIONS[from];
+  const skipWasShowing = before && "skip" in before && !hasAnswer(before.slug, draft, me);
   const place = edit
     ? {
         at: section.indexOf(question) + 1,
@@ -501,22 +503,19 @@ function Ask({
   const enter = useRef(at < from ? -1 : 1);
   useLayoutEffect(() => {
     window.scrollTo(0, 0);
-    // Only the first moment of arriving ignores taps, so a double tap on the last answer can't answer this one too.
-    const el = box.current;
-    // oxlint-disable-next-line react/immutability -- The box is a DOM node passed in as a ref.
-    if (el) el.style.pointerEvents = "none";
-    const open = setTimeout(() => el && (el.style.pointerEvents = ""), 120);
+    const el = boxRef.current;
+    const open = swallowDoubleTap(el);
     const motion = rise(el, enter.current);
     if (motion) motion.finished.then(settle, settle);
     else settle();
-    const first = matchMedia("(pointer: fine)").matches
-      ? box.current?.querySelector<HTMLInputElement>(
-          "input:not([type=file]):not([type=checkbox]):not(:disabled)",
-        )
-      : null;
-    (first ?? title.current)?.focus({ preventScroll: true });
+    const first = boxRef.current?.querySelector<HTMLInputElement>(
+      "input:not([type=file]):not([type=checkbox]):not(:disabled)",
+    );
+    if (!focusWithoutKeyboard(first, { preventScroll: true })) {
+      title.current?.focus({ preventScroll: true });
+    }
     return () => clearTimeout(open);
-  }, [box, settle]);
+  }, [boxRef, settle]);
 
   function keys(event: KeyboardEvent<HTMLFormElement>) {
     const t = event.target;
@@ -526,8 +525,7 @@ function Ask({
       const fields = [...event.currentTarget.querySelectorAll("input")].filter(isText);
       return fields[fields.indexOf(t) + 1]?.focus();
     }
-    // A phone's keyboard closes on Return, as its own check above the keys does.
-    if (matchMedia("(pointer: coarse)").matches) {
+    if (t.enterKeyHint === "done" && matchMedia(TOUCH).matches) {
       event.preventDefault();
       t.blur();
     }
@@ -551,7 +549,7 @@ function Ask({
           back={backLabel}
           onBack={back && (() => !held() && back())}
         />
-        <div ref={box} inert={pending || undefined}>
+        <div ref={boxRef} inert={pending || undefined}>
           <h1
             ref={title}
             id={titleId}
@@ -603,8 +601,7 @@ function Ask({
           label={edit && lastOfGroup ? "Save" : at === QUESTIONS.length - 1 ? "Finish" : "Continue"}
           skip={skip}
           hideSkip={chosen}
-          // Only a Skip the question before wasn't showing unfolds, so Continue never jumps wide and back.
-          unfold={!(before && "skip" in before && !hasAnswer(before.slug, draft, me))}
+          unfold={!skipWasShowing}
           onSkip={() => void skipThis()}
         />
       </form>
@@ -675,9 +672,8 @@ function Flow({
   const navigate = useNavigate();
   const router = useRouter();
   const urlHop = useLocation({ select: (location) => location.state.hop });
-  // A leaving screen fades to faint, not to nothing, and stays while the router loads the next one, so no frame between them is blank.
-  const [held, setHeld] = useState<{ search: Search; hop?: Hop } | null>(null);
-  const { search, hop } = held ?? { search: url, hop: urlHop };
+  const [leaving, setLeaving] = useState<{ search: Search; hop?: Hop } | null>(null);
+  const { search, hop } = leaving ?? { search: url, hop: urlHop };
   const [draft, setDraft] = useState(() => draftFrom(me, answers));
   const [completeAtLoad] = useState(me.complete);
   const [arrival, setArrival] = useState<Arrival | null>(null);
@@ -703,7 +699,7 @@ function Flow({
       x.animate(
         [
           { opacity: 1, transform: "none" },
-          { opacity: 0.1, transform: away },
+          { opacity: FAINT, transform: away },
         ],
         {
           duration: 120,
@@ -714,11 +710,11 @@ function Flow({
     const actions = flowing();
     if (actions) fade(actions);
     const exit = fade(el);
-    setHeld({ search, hop });
+    setLeaving({ search, hop });
     await exit.ready.catch(() => {});
     void next?.();
     await exit.finished.catch(() => {});
-    setHeld(null);
+    setLeaving(null);
   }
 
   async function go(slug: Slug, open = editing, opened = hop?.opened) {
@@ -732,14 +728,14 @@ function Flow({
     );
   }
 
-  // Going back through history when it holds the question before keeps browser Back and Forward in step with the arrow.
   async function back() {
     const to = QUESTIONS[at - 1]?.slug;
+    const previousIsBehind = hop?.from === to;
     if (moving.current) return;
     if (backToList) return toList(false);
     if (!to) return;
     await leave(false, () =>
-      hop?.from === to
+      previousIsBehind
         ? router.history.back()
         : navigate({
             to: "/onboarding",
@@ -749,14 +745,13 @@ function Flow({
     );
   }
 
-  // Back at the list, history is where it was before the group opened, so the browser's Back doesn't reopen it.
   async function toList(up: boolean) {
     if (moving.current) return;
     setArrival({ dir: up ? 1 : -1, group: QUESTIONS[at]?.group });
-    const depth = hop?.opened ? historyIndex() - hop.opened.listIndex : 0;
+    const entriesSinceOpened = hop?.opened ? historyIndex() - hop.opened.listIndex : 0;
     await leave(up, () =>
-      depth > 0
-        ? router.history.go(-depth)
+      entriesSinceOpened > 0
+        ? router.history.go(-entriesSinceOpened)
         : navigate({
             to: "/onboarding",
             search: { edit: true, gated: gated || undefined },
@@ -815,7 +810,7 @@ function Flow({
           set={(patch) => setDraft((d) => ({ ...d, ...patch }))}
           at={at}
           from={from}
-          box={box}
+          boxRef={box}
           locked={() => moving.current}
           settle={settle}
           edit={screen.editing}
@@ -831,7 +826,6 @@ function Flow({
 function Onboarding() {
   const member = useMember();
   const search = Route.useSearch();
-  // The bar stays outside the keyed screens, so the logo isn't remounted and decoded again on every question.
   return (
     <div className="min-h-dvh bg-blue-bright px-edge">
       <Bar signOut />

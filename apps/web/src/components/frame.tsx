@@ -14,12 +14,13 @@ export function Waiting({ under = true }: { under?: boolean }) {
 export const mayLeave = (unsaved?: () => boolean) =>
   !unsaved?.() || window.confirm("You have unsaved changes. Leave without saving them?");
 
-// A modal dialog makes the page's region inert, so a speaker inside one uses the dialog's own.
 export function announce(from: Element | string, text: string) {
-  const status =
-    typeof from === "string"
-      ? document.getElementById(from)
-      : (from.closest("dialog[open]") ?? document).querySelector("[role=status]");
+  let status: Element | null;
+  if (typeof from === "string") status = document.getElementById(from);
+  else {
+    const reachable = from.closest("dialog[open]") ?? document;
+    status = reachable.querySelector("[role=status]");
+  }
   if (!status) return;
   status.textContent = "";
   setTimeout(() => (status.textContent = text), 50);
@@ -52,14 +53,14 @@ function SignOut({ unsaved }: { unsaved?: () => boolean }) {
 
 export function Pages({ dock }: { dock?: boolean }) {
   const path = useLocation({ select: (location) => location.pathname });
-  // A link to the page you're on does nothing, since following it would close what's open there.
-  const stay = (to: string) => (to === path ? (e: MouseEvent) => e.preventDefault() : undefined);
+  const inertIfCurrent = (to: string) =>
+    to === path ? (e: MouseEvent) => e.preventDefault() : undefined;
   return (
     <nav aria-label="Pages" className={dock ? "pages pages-dock" : "pages"}>
-      <Link to="/hub" onClick={stay("/hub")}>
+      <Link to="/hub" onClick={inertIfCurrent("/hub")}>
         Events
       </Link>
-      <Link to="/you" onClick={stay("/you")}>
+      <Link to="/you" onClick={inertIfCurrent("/you")}>
         You
       </Link>
     </nav>

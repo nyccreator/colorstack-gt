@@ -4,7 +4,9 @@ import { ENTER, still } from "@/lib/motion";
 
 import type { Option } from "./options";
 
-// Only works inside an @container title, whose width shrinks a name too long for the line instead of breaking it.
+export const containerTitle =
+  "@container type-display text-title text-balance wrap-break-word hyphens-auto outline-none";
+
 export function FirstName({ name }: { name: string }) {
   return (
     <span
@@ -213,7 +215,6 @@ export function Progress({
       { duration: 300, easing: ENTER },
     );
   }, [at, from, total]);
-  // The arrow is invisible rather than absent, so the bar doesn't shift between questions and the list.
   return (
     <div data-progress className={`${progressRoom} -ml-3.5 flex items-center gap-3.5`}>
       <button

@@ -38,8 +38,8 @@ export const allowCode = internalMutation({
       .withIndex("by_email", (q) => q.eq("email", email))
       .unique();
     const now = Date.now();
-    const recent = (row?.sentAt ?? []).filter((at) => at > now - OTP_RATE_LIMIT.window * 1000);
-    if (recent.length >= OTP_RATE_LIMIT.max) return false;
+    const recent = (row?.sentAt ?? []).filter((at) => at > now - OTP_RATE_LIMIT.perSeconds * 1000);
+    if (recent.length >= OTP_RATE_LIMIT.codes) return false;
 
     const sentAt = [...recent, now];
     if (row) await ctx.db.patch(row._id, { sentAt });

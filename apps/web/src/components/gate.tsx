@@ -11,8 +11,9 @@ import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "rea
 import { z } from "zod";
 
 import { authClient } from "@/lib/auth-client";
+import { focusWithoutKeyboard } from "@/lib/media";
 import { still, useSlowHold } from "@/lib/motion";
-import { landing, signedIn } from "@/lib/session";
+import { landing, signIn } from "@/lib/session";
 
 import { BusyLabel, Message } from "./message";
 import { progressRoom } from "./onboarding/controls";
@@ -84,8 +85,7 @@ function cooldownLeft(email: string) {
   return Math.max(0, RESEND_COOLDOWN_SECONDS - Math.floor((Date.now() - sent) / 1000));
 }
 
-// The boxes only grow and shrink at the end, so edits land there wherever the hidden caret is.
-function nextCode(code: string, value: string, caret: number) {
+function editAtEnd(code: string, value: string, caret: number) {
   const change = value.length - code.length;
   if (change === -1) return code.slice(0, -1);
   if (change <= 0) return value.replace(/\D/g, "").slice(0, OTP_LENGTH);
@@ -153,9 +153,8 @@ function EmailStep({
   const [pending, setPending] = useState(false);
   const [slow, hold] = useSlowHold(pending);
 
-  // Only a fine pointer focuses the field on arrival, so a phone's keyboard doesn't open unasked.
   useEffect(() => {
-    if (!focus && matchMedia("(pointer: fine)").matches) input.current?.focus();
+    if (!focus) focusWithoutKeyboard(input.current);
   }, [focus]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -287,9 +286,8 @@ function CodeStep({
   async function verify(otp: string) {
     setPending(true);
     setError(null);
-    const result = await authClient.signIn.emailOtp({ email, otp }).catch(() => null);
+    const result = await signIn(router, convex, { email, otp });
     if (result && !result.error) {
-      await signedIn(router, convex);
       await navigate({ href: landing(redirect) });
       return;
     }
@@ -399,14 +397,12 @@ function CodeStep({
             input.current?.focus();
             return;
           }
-          // A code already marked wrong isn't sent again, since every send spends a try.
           if (wrong) return input.current?.select();
           void verify(code);
         }}
         className="mt-6 roomy:mt-8"
       >
         <div className="group relative">
-          {/* iOS paints its own selection over transparent text, but not over a field with no opacity. */}
           <input
             ref={input}
             autoFocus
@@ -419,7 +415,7 @@ function CodeStep({
             aria-describedby="gate-line code-message"
             onChange={(event) => {
               const { value, selectionStart } = event.target;
-              const digits = nextCode(code, value, selectionStart ?? value.length);
+              const digits = editAtEnd(code, value, selectionStart ?? value.length);
               if (digits === code) return;
               setCode(digits);
               setWrong(false);

@@ -143,6 +143,45 @@ function reveal(msg: HTMLElement, block: Element) {
   (s ?? window).scrollBy({ top: by, behavior: still() ? "instant" : "smooth" });
 }
 
+const MESSAGE_GAP = 16;
+const PRESS_WINDOW_MS = 1000;
+const CLICK_WAIT_MS = 600;
+
+function keepUnderPointer(held: { el: Element | null; y: number }, message: HTMLElement) {
+  const under = held.el?.isConnected ? held.el : null;
+  const { s: container, top, bottom } = viewOf(message);
+  const scroll = (by: number) => {
+    if (by >= 1) (container ?? window).scrollBy({ top: by, behavior: "instant" });
+  };
+  const drift = under ? under.getBoundingClientRect().top - held.y : 0;
+  if (drift >= 1) {
+    return scroll(
+      Math.min(drift, Math.max(0, message.getBoundingClientRect().top - top - MESSAGE_GAP)),
+    );
+  }
+  const over = message.getBoundingClientRect().bottom + MESSAGE_GAP - bottom;
+  if (over >= 1) {
+    scroll(
+      Math.min(
+        over,
+        under ? Math.max(0, under.getBoundingClientRect().top - top - MESSAGE_GAP) : over,
+      ),
+    );
+  }
+}
+
+function whenPressLands(open: () => void) {
+  let done = false;
+  const landed = () => {
+    if (done) return;
+    done = true;
+    document.removeEventListener("click", landed, true);
+    setTimeout(open);
+  };
+  document.addEventListener("click", landed, true);
+  setTimeout(landed, CLICK_WAIT_MS);
+}
+
 export function useChecks(errors: Record<string, string | undefined>) {
   const [shown, setShown] = useState<ReadonlySet<string>>(new Set());
   const held = useRef<{ el: Element | null; y: number; k: string } | null>(null);
@@ -153,28 +192,17 @@ export function useChecks(errors: Record<string, string | undefined>) {
     document.addEventListener("pointerdown", down, true);
     return () => document.removeEventListener("pointerdown", down, true);
   }, []);
-  // A new message keeps whatever the member moved to under the pointer, and shows itself only as far as that allows.
   useLayoutEffect(() => {
     const h = held.current;
     held.current = null;
     const msg = h && messageFor(h.k);
     if (!h || !msg) return;
-    const el = h.el?.isConnected ? h.el : null;
-    const { s, top, bottom } = viewOf(msg);
-    const scroll = (by: number) => {
-      if (by >= 1) (s ?? window).scrollBy({ top: by, behavior: "instant" });
-    };
-    const d = el ? el.getBoundingClientRect().top - h.y : 0;
-    if (d >= 1) return scroll(Math.min(d, Math.max(0, msg.getBoundingClientRect().top - top - 16)));
-    const over = msg.getBoundingClientRect().bottom + 16 - bottom;
-    if (over >= 1)
-      scroll(Math.min(over, el ? Math.max(0, el.getBoundingClientRect().top - top - 16) : over));
+    keepUnderPointer(h, msg);
   }, [shown]);
   const show = (keys: string[]) => setShown((s) => new Set([...s, ...keys]));
-  // A press shows the message only once it has landed, so the message can't move what was pressed out from under it.
   const leave = (k: string) => (e: FocusEvent) => {
     const p = pressed.current;
-    const pressing = e.timeStamp - p.at < 1000;
+    const pressing = e.timeStamp - p.at < PRESS_WINDOW_MS;
     const el =
       e.relatedTarget instanceof Element
         ? e.relatedTarget
@@ -186,15 +214,7 @@ export function useChecks(errors: Record<string, string | undefined>) {
       show([k]);
     };
     if (!pressing) return open();
-    let done = false;
-    const landed = () => {
-      if (done) return;
-      done = true;
-      document.removeEventListener("click", landed, true);
-      setTimeout(open);
-    };
-    document.addEventListener("click", landed, true);
-    setTimeout(landed, 600);
+    whenPressLands(open);
   };
   const error = (k: string) => (shown.has(k) ? errors[k] : undefined);
   return {
@@ -430,6 +450,18 @@ function Major({ d, set, check }: BodyProps) {
   );
 }
 
+function useKeepDroppedFilesInPage() {
+  useEffect(() => {
+    const stop = (event: DragEvent) => event.preventDefault();
+    addEventListener("dragover", stop);
+    addEventListener("drop", stop);
+    return () => {
+      removeEventListener("dragover", stop);
+      removeEventListener("drop", stop);
+    };
+  }, []);
+}
+
 function Career({ me, d, set, check, onUpload }: BodyProps) {
   const [busy, setBusy] = useState<string | null>(null);
   const [slow, hold] = useSlowHold(Boolean(busy));
@@ -445,16 +477,7 @@ function Career({ me, d, set, check, onUpload }: BodyProps) {
     void hold().then(() => setBusy(null));
   }, [busy, me.resume, hold]);
 
-  // A file dropped beside the field rather than on it would open in the tab and lose the answers.
-  useEffect(() => {
-    const stop = (event: DragEvent) => event.preventDefault();
-    addEventListener("dragover", stop);
-    addEventListener("drop", stop);
-    return () => {
-      removeEventListener("dragover", stop);
-      removeEventListener("drop", stop);
-    };
-  }, []);
+  useKeepDroppedFilesInPage();
 
   async function attach(file: File | undefined) {
     if (!file || busy) return;

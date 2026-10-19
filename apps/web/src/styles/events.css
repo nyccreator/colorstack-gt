@@ -437,16 +437,12 @@
   }
 }
 
-/* Reduced motion keeps this edge as it keeps the You page's bar, so it is !important in the base layer, where the
-   reset is. */
-@layer base {
-  @variant desk {
-    @supports (animation-timeline: scroll()) {
-      .events .side-event::before {
-        animation: events-side-edge linear both !important;
-        animation-timeline: scroll() !important;
-        animation-range: 0 16px !important;
-      }
+@variant desk {
+  @supports (animation-timeline: scroll()) {
+    .events .side-event::before {
+      animation: events-side-edge linear both;
+      animation-timeline: scroll();
+      animation-range: 0 16px;
     }
   }
 }
@@ -704,7 +700,8 @@ html:has(.events .view[open]) {
   scroll-snap-stop: always;
 }
 
-/* Safari 26 leaves a flex scroller's end padding out of what it scrolls, so this takes no room but reaches as far. */
+/* Safari 26 leaves a flex scroller's end padding out of what it scrolls (webkit.org/b/316902), so this takes no room
+   but reaches as far. */
 .events .pg::after {
   content: "";
   flex: none;
@@ -724,6 +721,9 @@ html:has(.events .view[open]) {
 }
 
 .events .ctl {
+  --ring: 2px;
+  --ring-gap: 2px;
+  --cl: 44px;
   position: absolute;
   z-index: 2;
   bottom: calc(var(--below) + env(safe-area-inset-bottom));
@@ -743,8 +743,8 @@ html:has(.events .view[open]) {
   display: grid;
   flex: none;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: var(--cl);
+  height: var(--cl);
   border-radius: 9999px;
   background: color-mix(in srgb, var(--color-diploma) 13%, transparent);
   cursor: pointer;
@@ -763,12 +763,11 @@ html:has(.events .view[open]) {
   background: color-mix(in srgb, var(--color-diploma) 16%, transparent);
 }
 
-/* A 36px flier with its ring is as tall as the 44px ×, and the padding keeps the ring inside the scrolling reel. */
 .events .reel {
   display: flex;
   gap: 8px;
   min-width: 0;
-  padding: 4px 6px;
+  padding: calc(var(--ring) + var(--ring-gap)) 6px;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -805,13 +804,13 @@ html:has(.events .view[open]) {
   position: relative;
   display: block;
   width: 29px;
-  height: 36px;
+  height: calc(var(--cl) - 2 * (var(--ring) + var(--ring-gap)));
   overflow: hidden;
   border-radius: 7px;
   background: var(--bg);
   opacity: 0.5;
-  outline: 2px solid transparent;
-  outline-offset: 2px;
+  outline: var(--ring) solid transparent;
+  outline-offset: var(--ring-gap);
 }
 
 @media (pointer: coarse) {
@@ -821,8 +820,8 @@ html:has(.events .view[open]) {
   }
 
   .events .reel button {
-    width: 44px;
-    height: 44px;
+    width: var(--cl);
+    height: var(--cl);
   }
 }
 

@@ -6,8 +6,8 @@ import { DESK, PHONE, useMedia } from "@/lib/media";
 import { Bar, Pages } from "../frame";
 import { EVENTS } from "./data";
 import { Actions, away, Details, type Fit, fitStack, Nothing, Picture, stackShape } from "./detail";
-import { Gallery, Skeletons } from "./gallery";
-import { View } from "./view";
+import { Gallery, remeasure, Skeletons } from "./gallery";
+import { tileOf, View } from "./view";
 
 const NONE = { art: "event", tone: "navy-medium" } as const;
 
@@ -28,11 +28,16 @@ const columnGap = (w: number) => Math.max(40, Math.min(64, 0.045 * w));
 const ROW = 264;
 const PHONE_ROW = 240;
 
+function focusTile(id: string) {
+  const pick = tileOf(id)?.querySelector<HTMLElement>(".pick");
+  pick?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  pick?.focus({ preventScroll: true });
+}
+
 export function EventsPage({ picked }: { picked?: string }) {
   const navigate = useNavigate();
   const router = useRouter();
-  // The router restores the page's scroll as it settles, so a closing event waits for that to find its tile.
-  const settled = useRouterState({ select: (s) => s.status === "idle" });
+  const scrollRestored = useRouterState({ select: (s) => s.status === "idle" });
   const desk = useMedia(DESK);
   const phone = useMedia(PHONE);
   const viewport = useViewport();
@@ -56,46 +61,33 @@ export function EventsPage({ picked }: { picked?: string }) {
   const focusTitle = useRef(false);
   const pushed = useRef(false);
   const grow = useRef(false);
-  const viewed = useRef<string | undefined>(undefined);
+  const lastViewed = useRef<string | undefined>(undefined);
   const [fit, setFit] = useState<Fit | null>(null);
   const [width, setWidth] = useState(0);
-  // The opened event stays on screen while it leaves, even once the address no longer names it.
-  const [viewing, setViewing] = useState<string | undefined>(undefined);
-  useEffect(() => {
-    // oxlint-disable-next-line react/set-state-in-effect -- The viewed event must outlive the address while it flies back.
-    if (opened) setViewing(opened.id);
-    else if (desk) setViewing(undefined);
-  }, [opened, desk]);
+  const [onScreen, setOnScreen] = useState<string | undefined>(undefined);
+  if (opened && opened.id !== onScreen) setOnScreen(opened.id);
+  else if (!opened && desk && onScreen) setOnScreen(undefined);
 
-  // The probe is watched too, so a font that loads late refits the stack.
   useLayoutEffect(() => {
     const el = side.current;
     const stk = stack.current;
     const pr = probe.current;
     if (!desk || !el || !stk || !pr) return setFit(null);
-    const measure = () => {
+    return remeasure(pr, () => {
       const room = el.clientHeight - parseFloat(getComputedStyle(el).paddingBottom) - stk.offsetTop;
       const shapes = upcoming.length ? upcoming.map(stackShape) : [1.6];
       const next = fitStack(pr, shapes, column(viewport.w), room);
       setFit((f) => (f?.width === next.width && f.t === next.t ? f : next));
-    };
-    measure();
-    const watch = new ResizeObserver(measure);
-    watch.observe(pr);
-    return () => watch.disconnect();
+    });
   }, [desk, viewport, upcoming]);
 
   useLayoutEffect(() => {
     const el = gallery.current;
     if (!el) return;
-    const measure = () => {
+    return remeasure(el, () => {
       const cs = getComputedStyle(el);
       setWidth(el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight));
-    };
-    measure();
-    const watch = new ResizeObserver(measure);
-    watch.observe(el);
-    return () => watch.disconnect();
+    });
   }, [desk, viewport, fit]);
 
   useLayoutEffect(() => {
@@ -130,16 +122,12 @@ export function EventsPage({ picked }: { picked?: string }) {
     title.current?.focus({ preventScroll: true });
   }, [picked]);
 
-  // Focus returns to the tile of the event last viewed, which the dialog's own focus return can't know.
   useEffect(() => {
-    if (viewing) return;
-    const id = viewed.current;
-    viewed.current = undefined;
-    if (!id) return;
-    const pick = document.querySelector<HTMLElement>(`.gal [data-event="${CSS.escape(id)}"] .pick`);
-    pick?.scrollIntoView({ block: "nearest", inline: "nearest" });
-    pick?.focus({ preventScroll: true });
-  }, [viewing]);
+    if (onScreen) return;
+    const id = lastViewed.current;
+    lastViewed.current = undefined;
+    if (id) focusTile(id);
+  }, [onScreen]);
 
   function pick(id: string) {
     if (!desk) {
@@ -238,6 +226,7 @@ export function EventsPage({ picked }: { picked?: string }) {
                     event={selected}
                     width={fit.width}
                     height={fit.width / stackShape(selected)}
+                    lazy
                   >
                     <Actions event={selected} mode="corner" />
                   </Picture>
@@ -276,27 +265,26 @@ export function EventsPage({ picked }: { picked?: string }) {
           </div>
         )}
       </div>
-      {viewing && !desk ? (
+      {onScreen && !desk ? (
         <View
           events={upcoming}
           start={Math.max(
             0,
-            upcoming.findIndex((e) => e.id === viewing),
+            upcoming.findIndex((e) => e.id === onScreen),
           )}
           now={now}
           next={next}
           probe={probe}
-          // oxlint-disable-next-line react/refs -- Read once as the dialog mounts, to know whether it grows from a tile.
-          grow={grow.current}
-          routed={!!opened || !settled}
+          grow={grow}
+          stayOpen={!!opened || !scrollRestored}
           onPage={(id) =>
             void navigate({ to: ".", search: { event: id }, replace: true, resetScroll: false })
           }
           onClose={close}
           onGone={(id) => {
-            viewed.current = id;
+            lastViewed.current = id;
             grow.current = false;
-            setViewing(undefined);
+            setOnScreen(undefined);
           }}
         />
       ) : null}

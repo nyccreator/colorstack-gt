@@ -9,7 +9,6 @@ export type Task = FunctionArgs<typeof api.members.completeTask>["task"];
 
 export type Option<T extends string> = { readonly value: T; readonly label: string };
 
-// Key order is display order.
 function listOf<T extends string>(labels: Record<T, string>): readonly Option<T>[] {
   return (Object.keys(labels) as T[]).map((value) => ({ value, label: labels[value] }));
 }
