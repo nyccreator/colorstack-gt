@@ -25,7 +25,7 @@ type Next = { group: Group; key: string };
 export type EditorDef = {
   focus: Partial<Record<string, string>>;
   fields: readonly Field[];
-  change?: (k: Field, d: Draft, prev: Draft) => { patch?: Partial<Draft>; focus?: string } | void;
+  change?: (k: Field, d: Draft) => { focus?: string } | void;
   chips?: boolean;
   instant?: boolean;
 };
@@ -1249,14 +1249,12 @@ export function createEditing<I>(initial: I, make: (inputs: () => I) => Deps) {
         if (!ed || !k || !isField(k) || !form().contains(t)) return;
         // A select can't be read-only like the text fields, so a change during a save is put back.
         if (ed.busy) return void (t.value = String(ed.draft[k]));
-        const prev = ed.draft;
-        const patch = setField(prev, k, t.value);
+        const patch = setField(ed.draft, k, t.value);
         if (!patch) return;
-        ed.draft = { ...prev, ...patch };
-        const more = E(ed).change?.(k, ed.draft, prev);
-        if (more?.patch) ed.draft = { ...ed.draft, ...more.patch };
+        ed.draft = { ...ed.draft, ...patch };
+        const more = E(ed).change?.(k, ed.draft);
         if (ed.asking) keep();
-        const reshapesForm = t.matches("select") || !!more?.patch;
+        const reshapesForm = t.matches("select");
         if (!showErrors() && reshapesForm) renderNow();
         if (more?.focus) $(more.focus, form())?.focus();
       },
