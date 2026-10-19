@@ -40,14 +40,24 @@ export function Message({
     );
   }
 
+  // The words rise rather than the line, so a scroll that measures the message as it appears isn't thrown off.
   return (
     <p
       id={id}
       role={role}
       className={`mt-4 flex items-baseline gap-2 text-message ${color} ${className}`}
     >
-      {tone === "error" ? <ErrorBadge /> : null}
-      <span className="text-pretty">{children}</span>
+      {tone === "error" ? <ErrorBadge className="animate-note" /> : null}
+      <span className="animate-note text-pretty">{children}</span>
     </p>
+  );
+}
+
+export function BusyLabel({ slow, idle, busy }: { slow: boolean; idle: string; busy: string }) {
+  return (
+    <span className="busy-label" data-slow={slow || undefined}>
+      <span aria-hidden={slow}>{idle}</span>
+      <span aria-hidden={!slow}>{busy}</span>
+    </span>
   );
 }

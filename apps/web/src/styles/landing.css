@@ -186,31 +186,7 @@
 }
 
 .lp-send {
-  display: inline-grid;
-  place-items: center;
   overflow: hidden;
-}
-
-.lp-send > span {
-  grid-area: 1 / 1;
-  transition:
-    translate 0.22s var(--ease-out-quint),
-    opacity 0.15s var(--ease-out-quint);
-}
-
-.lp-send > span + span {
-  translate: 0 14px;
-  opacity: 0;
-}
-
-.lp-send[data-slow] > span:first-child {
-  translate: 0 -14px;
-  opacity: 0;
-}
-
-.lp-send[data-slow] > span + span {
-  translate: none;
-  opacity: 1;
 }
 
 .lp-reveal {
@@ -1181,13 +1157,6 @@ footer > .bx {
   }
 
   .lp-reveal {
-    transition: opacity 120ms var(--ease-out-quint);
-  }
-
-  .lp-send > span,
-  .lp-send > span + span,
-  .lp-send[data-slow] > span:first-child {
-    translate: none;
     transition: opacity 120ms var(--ease-out-quint);
   }
 }

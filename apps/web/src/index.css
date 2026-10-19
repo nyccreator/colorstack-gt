@@ -86,11 +86,19 @@
   --animate-spin: spin 0.8s linear infinite;
   --animate-roll: roll 54s linear infinite;
   --animate-rise: rise 300ms var(--ease-out-quint) backwards;
+  --animate-note: note 160ms var(--ease-out-quint) backwards;
 
   @keyframes rise {
     from {
       opacity: 0;
       transform: translateY(16px);
+    }
+  }
+
+  @keyframes note {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
     }
   }
 
@@ -161,6 +169,40 @@
 }
 
 @layer components {
+  .busy-label {
+    display: inline-grid;
+    place-items: center;
+
+    & > span {
+      grid-area: 1 / 1;
+      transition:
+        translate 0.22s var(--ease-out-quint),
+        opacity 0.15s var(--ease-out-quint);
+    }
+
+    & > span + span {
+      translate: 0 14px;
+      opacity: 0;
+    }
+
+    &[data-slow] > span:first-child {
+      translate: 0 -14px;
+      opacity: 0;
+    }
+
+    &[data-slow] > span + span {
+      translate: none;
+      opacity: 1;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      & > span {
+        translate: none !important;
+        transition: opacity 0.12s var(--ease-out-quint);
+      }
+    }
+  }
+
   .ic {
     display: block;
     flex: none;
@@ -362,14 +404,15 @@
 
   /* The You page's bar edge and the spinners keep running, since they mark a state rather than moving anything. */
   @media (prefers-reduced-motion: reduce) {
-    *:not(.you .bar, .you .spin, .animate-spin, .animate-rise),
+    *:not(.you .bar, .you .spin, .animate-spin, .animate-rise, .animate-note),
     *::before,
     *::after {
       animation: none !important;
       scroll-behavior: auto !important;
     }
 
-    .animate-rise {
+    .animate-rise,
+    .animate-note {
       animation: fade 120ms var(--ease-out-quint) backwards !important;
     }
 

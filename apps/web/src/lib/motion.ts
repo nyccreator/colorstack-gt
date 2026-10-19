@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 // ENTER and MOVE are repeated as --ease-out-quint and --ease-move in index.css, so change both together.
 export const ENTER = "cubic-bezier(0.22, 1, 0.36, 1)";
@@ -24,10 +24,13 @@ export function useSlowHold(busy: boolean) {
     }, BUSY_AFTER);
     return () => clearTimeout(timer);
   }, [busy]);
-  const hold = () =>
-    new Promise<void>((resolve) =>
-      setTimeout(resolve, shownAt.current ? shownAt.current + LABEL_HOLD - performance.now() : 0),
-    );
+  const hold = useCallback(
+    () =>
+      new Promise<void>((resolve) =>
+        setTimeout(resolve, shownAt.current ? shownAt.current + LABEL_HOLD - performance.now() : 0),
+      ),
+    [],
+  );
   return [busy && slow, hold] as const;
 }
 

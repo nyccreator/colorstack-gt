@@ -15,7 +15,7 @@ import {
 } from "react";
 
 import type { Profile } from "@/lib/member";
-import { still } from "@/lib/motion";
+import { still, useSlowHold } from "@/lib/motion";
 
 import { field } from "../gate";
 import { type Draft, type Field, typedName, uploadResume } from "../member/draft";
@@ -432,6 +432,7 @@ function Major({ d, set, check }: BodyProps) {
 
 function Career({ me, d, set, check, onUpload }: BodyProps) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [slow, hold] = useSlowHold(Boolean(busy));
   const [problem, setProblem] = useState<string | null>(null);
   const [over, setOver] = useState(false);
   const was = useRef(me.resume);
@@ -440,9 +441,9 @@ function Career({ me, d, set, check, onUpload }: BodyProps) {
   // The new name shows once the member's row has it, so the field never flashes back to the old one.
   useEffect(() => {
     if (!busy || me.resume === was.current) return;
-    setBusy(null);
     settle.current(true);
-  }, [busy, me.resume]);
+    void hold().then(() => setBusy(null));
+  }, [busy, me.resume, hold]);
 
   // A file dropped beside the field rather than on it would open in the tab and lose the answers.
   useEffect(() => {
@@ -472,6 +473,7 @@ function Career({ me, d, set, check, onUpload }: BodyProps) {
       was.current?.name === result.resume.name &&
       was.current?.size === result.resume.size;
     if (result.ok && !same) return;
+    await hold();
     setProblem(result.ok ? null : result.error);
     setBusy(null);
     settle.current(result.ok);
@@ -531,7 +533,7 @@ function Career({ me, d, set, check, onUpload }: BodyProps) {
           />
           <span
             aria-live="polite"
-            className={`min-w-0 flex-1 truncate ${busy ? "text-diploma/70" : me.resume ? "" : "text-diploma/60"}`}
+            className={`min-w-0 flex-1 truncate ${slow ? "text-diploma/70" : busy || me.resume ? "" : "text-diploma/60"}`}
           >
             {busy ?? me.resume?.name ?? (
               <>
@@ -542,9 +544,9 @@ function Career({ me, d, set, check, onUpload }: BodyProps) {
           </span>
           <span
             aria-live="polite"
-            className={`flex-none ${busy ? "font-sans text-fine font-normal tracking-normal text-diploma/60" : "text-base font-semibold text-diploma/86 transition-colors group-hover:text-diploma roomy:text-lg"}`}
+            className={`flex-none ${slow ? "font-sans text-fine font-normal tracking-normal text-diploma/60" : "text-base font-semibold text-diploma/86 transition-colors group-hover:text-diploma roomy:text-lg"}`}
           >
-            {busy ? "Uploading…" : me.resume ? "Replace" : "Upload"}
+            {slow ? "Uploading…" : me.resume ? "Replace" : "Upload"}
           </span>
         </label>
         <button
