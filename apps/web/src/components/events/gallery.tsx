@@ -1,56 +1,13 @@
-import type { MouseEvent, Ref } from "react";
+import { type MouseEvent, type Ref, useLayoutEffect, useRef, useState } from "react";
 
 import type { ClubEvent } from "./data";
-import { Add, monthOf, Picture, SHORT, tileShape } from "./detail";
+import { Actions, monthOf, Picture, SHORT, tileShape } from "./detail";
 
 const CAPTION_WIDTH = 136;
-const UNFILLED_ROW = 9;
-const UNFILLED_LAST_ROW = 0.4;
-
-// A row with a narrow flier grows until that flier's caption fits, but never past filling the width.
-const captioned = (h: number, shapes: number[], fill = Infinity) =>
-  Math.min(fill, Math.max(h, CAPTION_WIDTH / Math.min(...shapes)));
-
-function justify<X>(
-  items: X[],
-  shape: (x: X) => number,
-  width: number,
-  gap: number,
-  target: number,
-) {
-  const n = items.length;
-  const lo = 0.72 * target;
-  const hi = 1.32 * target;
-  const best = [0];
-  const from = [0];
-  for (let i = 1; i <= n; i++) {
-    best[i] = Infinity;
-    let sum = 0;
-    let narrow = Infinity;
-    for (let j = i - 1; j >= 0; j--) {
-      sum += shape(items[j]!);
-      narrow = Math.min(narrow, shape(items[j]!));
-      const k = i - j;
-      const h = (width - (k - 1) * gap) / sum;
-      if ((h < lo || h * narrow < CAPTION_WIDTH) && k > 1) break;
-      const cost =
-        h > hi ? (i === n ? UNFILLED_LAST_ROW : UNFILLED_ROW) : ((h - target) / target) ** 2;
-      if (best[j]! + cost < best[i]!) {
-        best[i] = best[j]! + cost;
-        from[i] = j;
-      }
-    }
-  }
-  const rows: X[][] = [];
-  for (let i = n; i > 0; i = from[i]!) rows.unshift(items.slice(from[i], i));
-  return rows.map((row) => {
-    const h = (width - (row.length - 1) * gap) / row.reduce((s, x) => s + shape(x), 0);
-    return { items: row, h: h > hi ? target : h, fill: h };
-  });
-}
 
 function Tile({
   event,
+  w,
   h,
   next,
   on,
@@ -58,13 +15,13 @@ function Tile({
   onPick,
 }: {
   event: ClubEvent;
+  w: number;
   h: number;
   next: boolean;
   on: boolean;
   tag: boolean;
   onPick: (id: string) => void;
 }) {
-  const w = tileShape(event) * h;
   const href = `/hub?event=${encodeURIComponent(event.id)}`;
   const pick = (e: MouseEvent) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -91,7 +48,7 @@ function Tile({
         <a className="ct" href={href} tabIndex={-1} aria-hidden onClick={pick}>
           {event.title}
         </a>
-        <Add event={event} tile />
+        <Actions event={event} mode="tile" />
       </div>
     </article>
   );
@@ -122,7 +79,7 @@ function Blank({ shape, h, k, fade = 1 }: { shape: number; h: number; k: number;
   );
 }
 
-type Grid = { width: number; gap: number; target: number; phone: boolean };
+type Grid = { width: number; gap: number; row: number; phone: boolean };
 
 export function Skeletons({ box, ...grid }: Grid & { box: Ref<HTMLDivElement> }) {
   const month = (shapes: number[], k0: number) => (
@@ -130,23 +87,11 @@ export function Skeletons({ box, ...grid }: Grid & { box: Ref<HTMLDivElement> })
       <div className="mh">
         <span className="skm" />
       </div>
-      {grid.phone ? (
-        <div className="strip still">
-          {shapes.map((shape, k) => (
-            <Blank key={k} shape={shape} h={grid.target} k={k0 + k} />
-          ))}
-        </div>
-      ) : (
-        <div className="wall">
-          {justify(shapes, (s) => s, grid.width, grid.gap, grid.target).map((row, r) => (
-            <div key={r} className="line">
-              {row.items.map((shape, k) => (
-                <Blank key={k} shape={shape} h={row.h} k={k0 + k} />
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
+      <div className={grid.phone ? "strip still" : "wall"}>
+        {shapes.map((shape, k) => (
+          <Blank key={k} shape={shape} h={grid.row} k={k0 + k} />
+        ))}
+      </div>
     </section>
   );
   return (
@@ -173,11 +118,33 @@ export function Gallery({
   selected?: ClubEvent;
   onPick: (id: string) => void;
 }) {
-  const tile = (e: ClubEvent, h: number) => (
+  const caps = useRef<HTMLDivElement>(null);
+  const [need, setNeed] = useState<Record<string, number>>({});
+  // A hidden copy of each caption's date and buttons gives the width it needs, so a late font refits too.
+  useLayoutEffect(() => {
+    const box = caps.current!;
+    const measure = () => {
+      const next = Object.fromEntries(
+        events.map((e, i) => [e.id, Math.ceil(box.children[i]!.getBoundingClientRect().width)]),
+      );
+      setNeed((old) => (events.every((e) => old[e.id] === next[e.id]) ? old : next));
+    };
+    measure();
+    const watch = new ResizeObserver(measure);
+    for (const c of box.children) watch.observe(c);
+    return () => watch.disconnect();
+  }, [events]);
+  const { width, gap, row, phone } = grid;
+  // A flier narrower than its caption is cropped to the caption, and one wider than the gallery to the gallery.
+  const wide = (e: ClubEvent) =>
+    Math.min(width, Math.max(need[e.id] ?? CAPTION_WIDTH, row * tileShape(e)));
+
+  const tile = (e: ClubEvent) => (
     <Tile
       key={e.id}
       event={e}
-      h={h}
+      w={wide(e)}
+      h={row}
       next={e === next}
       on={e === selected}
       tag={!selected && e === next}
@@ -190,75 +157,67 @@ export function Gallery({
     if (months.at(-1)?.[0] === label) months.at(-1)![1].push(e);
     else months.push([label, [e]]);
   }
-  const { width, gap, target, phone } = grid;
-  const strip = (list: ClubEvent[]) => {
-    const h = captioned(target, list.map(tileShape));
-    return <div className="strip">{list.map((e) => tile(e, h))}</div>;
-  };
 
   const lone = (e: ClubEvent) => {
-    if (phone) {
-      const h = captioned(target, [tileShape(e)]);
+    if (phone)
       return (
         <div className="strip still">
-          {tile(e, h)}
-          <Blank shape={0.8} h={h} k={1} fade={0.7} />
-          <Blank shape={1} h={h} k={2} fade={0.4} />
+          {tile(e)}
+          <Blank shape={0.8} h={row} k={1} fade={0.7} />
+          <Blank shape={1} h={row} k={2} fade={0.4} />
         </div>
       );
+    let room = width - wide(e);
+    const fill: number[] = [];
+    for (const shape of FILL) {
+      if (room < gap + shape * row) break;
+      room -= gap + shape * row;
+      fill.push(shape);
     }
-    const rowHeight = (n: number) =>
-      (width - n * gap) / FILL.slice(0, n).reduce((s, a) => s + a, tileShape(e));
-    let n = 1;
-    for (let k = 2; k <= FILL.length; k++)
-      if (
-        rowHeight(k) * tileShape(e) >= CAPTION_WIDTH &&
-        Math.abs(rowHeight(k) - target) < Math.abs(rowHeight(n) - target)
-      )
-        n = k;
-    const h = rowHeight(n);
     return (
       <div className="wall">
-        <div className="line">
-          {tile(e, h)}
-          {FILL.slice(0, n).map((shape, k) => (
-            <Blank
-              key={k}
-              shape={shape}
-              h={h}
-              k={k + 1}
-              fade={0.8 - (0.55 * k) / Math.max(1, n - 1)}
-            />
-          ))}
-        </div>
+        {tile(e)}
+        {fill.map((shape, k) => (
+          <Blank
+            key={k}
+            shape={shape}
+            h={row}
+            k={k + 1}
+            fade={0.8 - (0.55 * k) / Math.max(1, fill.length - 1)}
+          />
+        ))}
       </div>
     );
   };
 
-  return months.map(([label, list]) => (
-    <section key={label} className="mon">
-      <div className="mh">
-        <h2 className="mo">{label}</h2>
-        <span className="n">
-          {list.length} {list.length === 1 ? "event" : "events"}
-        </span>
+  return (
+    <>
+      <div ref={caps} className="caps">
+        {events.map((e) => (
+          <div key={e.id} className="cap">
+            <span className="meta">{SHORT.format(e.startsAt)}</span>
+            <span className="acts">
+              {e.link ? <span className="ra" /> : null}
+              <span className="ra" />
+            </span>
+          </div>
+        ))}
       </div>
-      {events.length === 1 ? (
-        lone(list[0]!)
-      ) : phone ? (
-        strip(list)
-      ) : (
-        <div className="wall">
-          {justify(list, tileShape, width, gap, target).map((row) => {
-            const h = captioned(row.h, row.items.map(tileShape), row.fill);
-            return (
-              <div key={row.items[0]!.id} className="line">
-                {row.items.map((e) => tile(e, h))}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </section>
-  ));
+      {months.map(([label, list]) => (
+        <section key={label} className="mon">
+          <div className="mh">
+            <h2 className="mo">{label}</h2>
+            <span className="n">
+              {list.length} {list.length === 1 ? "event" : "events"}
+            </span>
+          </div>
+          {events.length === 1 ? (
+            lone(list[0]!)
+          ) : (
+            <div className={phone ? "strip" : "wall"}>{list.map(tile)}</div>
+          )}
+        </section>
+      ))}
+    </>
+  );
 }

@@ -105,11 +105,13 @@ export function Picture({
   event,
   width,
   height,
+  eager,
   children,
 }: {
   event: Look;
   width: number;
   height: number;
+  eager?: boolean;
   children?: ReactNode;
 }) {
   return (
@@ -123,7 +125,7 @@ export function Picture({
           src={event.flier.src}
           width={event.flier.width}
           height={event.flier.height}
-          loading="lazy"
+          loading={eager ? "eager" : "lazy"}
           decoding="async"
           alt=""
         />
@@ -135,18 +137,22 @@ export function Picture({
   );
 }
 
-export function Zoom({ event }: { event: ClubEvent }) {
-  if (!event.flier) return null;
+export function Actions({ event, mode }: { event: ClubEvent; mode: "tile" | "corner" }) {
   return (
-    <a
-      className="zm"
-      href={event.flier.src}
-      target="_blank"
-      rel="noreferrer"
-      aria-label={`Open the ${event.title} flier full size`}
-    >
-      <i className="ic zoom" aria-hidden />
-    </a>
+    <div className={mode === "tile" ? "acts" : "cor"}>
+      {event.link ? (
+        <a
+          className={mode === "tile" ? "ra" : "zm"}
+          href={event.link.href}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={`${event.link.label} for ${event.title}`}
+        >
+          <i className="ic qr" aria-hidden />
+        </a>
+      ) : null}
+      <Add event={event} mode={mode} />
+    </div>
   );
 }
 
@@ -156,17 +162,26 @@ const TYPE_FLOOR = 0.88;
 const WIDTH_FLOOR = 0.72;
 const STEP = 0.02;
 
+// Every measure lays out each event's details, and no part of a stack shrinks faster than its width, so a step more
+// than one above room / full-size height can't fit and is skipped.
 export function fitStack(probe: HTMLElement, shapes: number[], widest: number, room: number): Fit {
   let k = 1;
+  let reach = 1;
   for (;;) {
     const width = Math.floor(widest * k);
     const t = Math.max(TYPE_FLOOR, k);
-    probe.style.width = `${width}px`;
-    probe.style.setProperty("--t", String(t));
-    const tallest = Math.max(
-      ...Array.from(probe.children, (c, i) => (c as HTMLElement).offsetHeight + width / shapes[i]!),
-    );
-    if (tallest <= room || k <= WIDTH_FLOOR) return { width, t };
+    if (k <= reach || k <= WIDTH_FLOOR) {
+      probe.style.width = `${width}px`;
+      probe.style.setProperty("--t", String(t));
+      const tallest = Math.max(
+        ...Array.from(
+          probe.children,
+          (c, i) => (c as HTMLElement).offsetHeight + width / shapes[i]!,
+        ),
+      );
+      if (tallest <= room || k <= WIDTH_FLOOR) return { width, t };
+      if (k === 1) reach = room / tallest + STEP;
+    }
     k = Math.max(WIDTH_FLOOR, k - STEP);
   }
 }
@@ -213,15 +228,6 @@ export function Details({
           </span>
         </p>
       </div>
-      <div className="acts">
-        <Add event={event} />
-        {event.link ? (
-          <a className="q" href={event.link.href} target="_blank" rel="noreferrer">
-            {event.link.label}
-            <i className="ic out" aria-hidden />
-          </a>
-        ) : null}
-      </div>
     </div>
   );
 }
@@ -242,7 +248,7 @@ export function Nothing() {
   );
 }
 
-export function Add({ event, tile }: { event: ClubEvent; tile?: boolean }) {
+function Add({ event, mode }: { event: ClubEvent; mode: "tile" | "corner" }) {
   const [added, setAdded] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLUListElement>(null);
@@ -273,8 +279,11 @@ export function Add({ event, tile }: { event: ClubEvent; tile?: boolean }) {
       button.current?.focus();
     };
     const toggled = (e: ToggleEvent) => {
-      if (e.newState === "open") document.addEventListener("keydown", escape, true);
-      else document.removeEventListener("keydown", escape, true);
+      if (e.newState !== "open") return document.removeEventListener("keydown", escape, true);
+      document.addEventListener("keydown", escape, true);
+      // CSS can't tell whether the menu fell back to opening above its button, so the corner it grows from is read here.
+      const above = m.getBoundingClientRect().top < button.current!.getBoundingClientRect().top;
+      m.style.transformOrigin = above ? "right bottom" : "right top";
     };
     m.addEventListener("toggle", toggled);
     return () => {
@@ -296,22 +305,15 @@ export function Add({ event, tile }: { event: ClubEvent; tile?: boolean }) {
         ref={button}
         type="button"
         popoverTarget={id}
-        aria-label={tile ? `Add ${event.title} to your calendar` : undefined}
-        className={`${tile ? "ra" : "solid"}${added ? " added" : ""}`}
+        aria-label={`Add ${event.title} to your calendar`}
+        className={`${mode === "tile" ? "ra" : "zm"}${added ? " added" : ""}`}
         style={{ anchorName: anchor }}
       >
         <span ref={face} key={String(added)} className="face">
-          <i className={`ic ${added ? "tick" : tile ? "add" : "cal"}`} aria-hidden />
-          {tile ? null : <span>{added ? "Added to calendar" : "Add to calendar"}</span>}
+          <i className={`ic ${added ? "tick" : "add"}`} aria-hidden />
         </span>
       </button>
-      <ul
-        ref={menu}
-        id={id}
-        popover="auto"
-        className={tile ? "menu end" : "menu"}
-        style={{ positionAnchor: anchor }}
-      >
+      <ul ref={menu} id={id} popover="auto" className="menu" style={{ positionAnchor: anchor }}>
         <li>
           <a
             href={google(event)}
