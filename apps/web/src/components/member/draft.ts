@@ -11,6 +11,7 @@ import {
   type ProfileSite,
 } from "@colorstack-gt/backend/convex/lib/identity";
 import { MESSAGES } from "@colorstack-gt/backend/convex/lib/messages";
+import { degreeLevel } from "@colorstack-gt/backend/convex/lib/programs";
 import { env } from "@colorstack-gt/env/web";
 import { useMutation } from "convex/react";
 import type { FunctionArgs } from "convex/server";
@@ -140,7 +141,6 @@ const has = <T extends string>(options: readonly Option<T>[], value: string): va
 
 const PICKED: Partial<Record<Field, readonly Option<string>[]>> = {
   choice: PRONOUN_OPTIONS,
-  standing: CLASS_STANDINGS,
   season: SEASONS,
   year: YEAR_OPTIONS,
   gpa: GPA_RANGES,
@@ -149,8 +149,14 @@ const PICKED: Partial<Record<Field, readonly Option<string>[]>> = {
   lowIncome: YES_NO,
 };
 
+export const setStanding = (d: Draft, standing: Studies["classStanding"]): Partial<Draft> =>
+  d.standing && degreeLevel(standing) !== degreeLevel(d.standing)
+    ? { standing, major: "", minor: "" }
+    : { standing };
+
 export function setField(d: Draft, key: string | undefined, value: string): Partial<Draft> | null {
   if (!isField(key) || typeof d[key] !== "string") return null;
+  if (key === "standing") return has(CLASS_STANDINGS, value) ? setStanding(d, value) : null;
   const options = PICKED[key];
   if (options && !has(options, value)) return null;
   const text = key === "linkedin" || key === "github" ? typedName(key, value) : value;

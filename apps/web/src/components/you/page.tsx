@@ -212,12 +212,6 @@ const EDITORS: Record<Eid, EditorDef> = {
       grad: "#season",
       gpa: "#gpa",
     },
-    // A new degree level has its own majors, so the typed one goes.
-    change: (k, d, prev) => {
-      if (k === "standing" && d.standing && prev.standing && level(d) !== level(prev)) {
-        return { patch: { major: "" } };
-      }
-    },
     fields: ["major", "year"],
   },
   links: {
@@ -669,7 +663,7 @@ function Editor({
             </datalist>
           </Field>
           <Field keys={["minor"]} label={LABEL.minor} id="minor">
-            <input {...text("minor")} placeholder="Add one" />
+            <input key={level(d)} {...text("minor")} placeholder="Add one" />
           </Field>
           <Field
             keys={["season", "year"]}

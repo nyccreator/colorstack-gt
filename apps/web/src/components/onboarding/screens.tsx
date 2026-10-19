@@ -18,7 +18,7 @@ import type { Profile } from "@/lib/member";
 import { still, useSlowHold } from "@/lib/motion";
 
 import { field } from "../gate";
-import { type Draft, type Field, typedName, uploadResume } from "../member/draft";
+import { type Draft, type Field, setStanding, typedName, uploadResume } from "../member/draft";
 import { Message } from "../message";
 import { answer, Chips, Prefixed, Ring, Rows } from "./controls";
 import {
@@ -742,10 +742,7 @@ export function Body({ slug, ...props }: BodyProps & { slug: Slug }) {
         "standing",
         CLASS_STANDINGS,
         d.standing,
-        (standing) =>
-          d.standing && degreeLevel(standing) !== degreeLevel(d.standing)
-            ? { standing, major: "", minor: "" }
-            : { standing },
+        (standing) => setStanding(d, standing),
         undefined,
         true,
       );
