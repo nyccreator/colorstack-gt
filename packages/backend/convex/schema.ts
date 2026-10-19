@@ -144,4 +144,8 @@ export default defineSchema({
   audits: defineTable({ exportedAt: v.number(), emails: v.number() }).index("by_exportedAt", [
     "exportedAt",
   ]),
+
+  codeSends: defineTable({ email: v.string(), sentAt: v.array(v.number()) }).index("by_email", [
+    "email",
+  ]),
 });

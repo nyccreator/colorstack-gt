@@ -5,7 +5,7 @@ export const OTP_EXPIRY_SECONDS = 10 * 60;
 /** Wrong entries allowed before a code stops working. */
 export const OTP_ALLOWED_ATTEMPTS = 3;
 
-/** Code requests Better Auth accepts per address in each window. */
+/** Codes one address can request in each window, in seconds. */
 export const OTP_RATE_LIMIT = { window: 60, max: 3 };
 
 /** How long the code screen waits before offering to send another. */
