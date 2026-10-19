@@ -227,7 +227,7 @@ export function Progress({
           onClick={onBack}
           disabled={disabled}
           aria-label={back}
-          className={`grid size-12 flex-none cursor-pointer place-items-center rounded-full text-diploma/86 transition-[background-color,color] hover:bg-diploma/13 hover:text-diploma disabled:cursor-wait disabled:text-diploma/45 disabled:hover:bg-transparent ${
+          className={`grid size-12 flex-none cursor-pointer place-items-center rounded-full text-diploma/86 transition-[background-color,color] hover:bg-diploma/13 hover:text-diploma active:bg-diploma/13 disabled:cursor-wait disabled:text-diploma/45 disabled:hover:bg-transparent ${
             onBack ? "" : "invisible"
           }`}
         >

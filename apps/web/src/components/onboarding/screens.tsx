@@ -406,7 +406,7 @@ function Major({ d, set, check }: BodyProps) {
                   setSecond(false);
                   requestAnimationFrame(() => document.getElementById("add-second")?.focus());
                 }}
-                className="absolute top-1/2 right-2 grid size-11 -translate-y-1/2 cursor-pointer place-items-center rounded-full text-diploma/70 transition-[background-color,color] hover:bg-diploma/13 hover:text-diploma focus-visible:outline-offset-0 roomy:right-3 roomy:size-12"
+                className="absolute top-1/2 right-2 grid size-11 -translate-y-1/2 cursor-pointer place-items-center rounded-full text-diploma/70 transition-[background-color,color] hover:bg-diploma/13 hover:text-diploma active:bg-diploma/13 focus-visible:outline-offset-0 roomy:right-3 roomy:size-12"
               >
                 <i aria-hidden className="ic x size-5.5" />
               </button>
@@ -421,7 +421,7 @@ function Major({ d, set, check }: BodyProps) {
             setSecond(true);
             requestAnimationFrame(() => document.getElementById("minor")?.focus());
           }}
-          className="mt-4 inline-flex min-h-12 cursor-pointer items-center rounded-full px-5 text-left type-display text-base font-semibold text-diploma/86 transition-[background-color,color] hover:bg-diploma/13 hover:text-diploma roomy:px-8 roomy:text-lg"
+          className="mt-4 inline-flex min-h-12 cursor-pointer items-center rounded-full px-5 text-left type-display text-base font-semibold text-diploma/86 transition-[background-color,color] hover:bg-diploma/13 hover:text-diploma active:bg-diploma/13 roomy:px-8 roomy:text-lg"
         >
           + Add a second major or minor
         </button>

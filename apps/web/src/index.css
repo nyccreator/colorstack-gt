@@ -7,6 +7,7 @@
 @custom-variant roomy (@media (min-width: 700px) and (min-height: 600px));
 @custom-variant tall (@media (min-width: 700px) and (min-height: 880px));
 @custom-variant short (@media (max-height: 499px));
+@custom-variant pinned (@media ((width < 700px) or (height < 880px)) and (height >= 500px));
 @custom-variant desk (@media (min-width: 1024px) and (min-height: 560px));
 @custom-variant low (@media (min-width: 1024px) and (560px <= height < 740px));
 
@@ -82,6 +83,7 @@
   --ease-move: cubic-bezier(0.32, 0.72, 0, 1);
   --default-transition-duration: 180ms;
   --default-transition-timing-function: ease;
+  --animate-spin: spin 0.8s linear infinite;
   --animate-roll: roll 54s linear infinite;
   --animate-rise: rise 300ms var(--ease-out-quint) backwards;
 
@@ -109,7 +111,7 @@
 }
 
 @utility btn-quiet {
-  @apply flex min-h-12 cursor-pointer items-center justify-center rounded-full px-link-x py-2 text-center type-nav text-diploma transition-[background-color] hover:bg-diploma/13 disabled:cursor-default disabled:text-diploma/45 disabled:hover:bg-transparent;
+  @apply flex min-h-12 cursor-pointer items-center justify-center rounded-full px-link-x py-2 text-center type-nav text-diploma transition-[background-color] hover:bg-diploma/13 active:bg-diploma/13 disabled:cursor-default disabled:text-diploma/45 disabled:hover:bg-transparent;
 }
 
 @utility ring-focus {
@@ -243,6 +245,7 @@
 
   /* The body is blue too, so overscroll and iOS's scroll past the end under the keyboard show the page's blue. */
   body {
+    -webkit-tap-highlight-color: transparent;
     margin: 0;
     background: var(--color-blue-bright);
     color: var(--color-diploma);
@@ -357,13 +360,23 @@
     }
   }
 
-  /* The You page's bar keeps its scroll-driven edge, which marks a state rather than moving anything. */
+  /* The You page's bar edge and the spinners keep running, since they mark a state rather than moving anything. */
   @media (prefers-reduced-motion: reduce) {
-    *:not(.you .bar),
+    *:not(.you .bar, .you .spin, .animate-spin, .animate-rise),
     *::before,
     *::after {
       animation: none !important;
       scroll-behavior: auto !important;
+    }
+
+    .animate-rise {
+      animation: fade 120ms var(--ease-out-quint) backwards !important;
+    }
+
+    @keyframes fade {
+      from {
+        opacity: 0;
+      }
     }
   }
 

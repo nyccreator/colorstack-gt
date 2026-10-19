@@ -195,7 +195,7 @@
   grid-area: 1 / 1;
   transition:
     translate 0.22s var(--ease-out-quint),
-    opacity 0.15s ease-out;
+    opacity 0.15s var(--ease-out-quint);
 }
 
 .lp-send > span + span {
@@ -213,21 +213,22 @@
   opacity: 1;
 }
 
+.lp-reveal {
+  display: grid;
+  grid-template-rows: 1fr;
+  text-align: left;
+  transition: opacity 0.15s var(--ease-out-quint);
+}
+
 @media (min-height: 640px) {
   .lp-reveal {
     position: absolute;
     top: 100%;
     inset-inline: 0;
+    transition:
+      grid-template-rows 0.3s var(--ease-out-quint),
+      opacity 0.15s var(--ease-out-quint);
   }
-}
-
-.lp-reveal {
-  display: grid;
-  grid-template-rows: 1fr;
-  text-align: left;
-  transition:
-    grid-template-rows 0.3s var(--ease-out-quint),
-    opacity 0.15s ease-out;
 }
 
 .lp-reveal[aria-hidden="true"] {
@@ -252,9 +253,15 @@
   height: calc(var(--stages) * var(--step));
 }
 
+/* Without the rubber band, a pull at the top ends as a plain drag and WebKit never snaps it on to the next stop. */
 @media (prefers-reduced-motion: no-preference) {
   html:has(.landing) {
     scroll-snap-type: y mandatory;
+    overscroll-behavior-y: none;
+  }
+
+  html:has(.landing.typing) {
+    scroll-snap-type: none;
   }
 }
 
@@ -275,6 +282,19 @@
   overflow: clip;
 }
 
+.landing.typing .stage {
+  position: relative;
+}
+
+.landing.typing .snap {
+  display: none;
+}
+
+@property --y {
+  syntax: "*";
+  inherits: false;
+}
+
 .scene {
   position: absolute;
   inset: 0;
@@ -284,8 +304,13 @@
   will-change: transform;
 }
 
+/* The row grows in whole 2px steps, so the heading above moves by whole pixels and a tilted token icon
+   doesn't twitch against its words; it is exactly 0 and exactly --split at either end. */
 .scene.split {
-  grid-template-rows: minmax(0, 1fr) calc(var(--t, 0) * var(--split));
+  grid-template-rows: minmax(0, 1fr) max(
+      0px,
+      calc(var(--split) - round(up, calc((1 - var(--t, 0)) * var(--split)), 2px))
+    );
 }
 
 .split > .tiles,
@@ -577,15 +602,13 @@
 }
 
 .it-st {
+  --sh-y: calc(var(--sticker) * 0.022);
+  --sh-blur: calc(var(--sticker) * 0.033);
+  position: relative;
   grid-row: 2;
   width: var(--sticker);
   height: var(--sticker);
-  background: var(--art) center / contain no-repeat;
   transform: rotate(var(--r, 0deg));
-  filter: drop-shadow(
-    0 calc(var(--sticker) * 0.022) calc(var(--sticker) * 0.033)
-      color-mix(in srgb, var(--color-navy) 30%, transparent)
-  );
 }
 
 .it-tx {
@@ -605,19 +628,34 @@
   text-wrap: balance;
 }
 
+@property --tk-l {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --tk-r {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
 .tk {
   --as: 1.44;
   position: relative;
   isolation: isolate;
   display: inline-block;
   margin-left: 0.02em;
-  padding: 0 0.28em 0 calc(0.94em * var(--as) + 0.16em);
+  --tk-l: calc(0.94 * var(--as) + 0.16);
+  --tk-r: 0.28;
+  padding: 0 calc(var(--tk-r) * 1em) 0 calc(var(--tk-l) * 1em);
   white-space: nowrap;
   cursor: pointer;
   user-select: none;
-  -webkit-tap-highlight-color: transparent;
   outline: none;
-  transition: padding 0.38s var(--ease-out-quint);
+  transition:
+    --tk-l 0.38s var(--ease-out-quint),
+    --tk-r 0.38s var(--ease-out-quint);
 }
 
 .tk::before {
@@ -665,7 +703,8 @@
 }
 
 .tk.bare {
-  padding-inline: 0.42em;
+  --tk-l: 0.42;
+  --tk-r: 0.42;
   pointer-events: none;
 }
 
@@ -680,17 +719,44 @@
 }
 
 .tk-pic {
+  --sh-y: 0.03em;
+  --sh-blur: 0.045em;
+  position: absolute;
+  inset: 0;
+  transform: rotate(var(--r, 0deg));
+}
+
+.tk-pic::after,
+.it-st::after {
+  content: "";
   position: absolute;
   inset: 0;
   background: var(--art) center / contain no-repeat;
-  transform: rotate(var(--r, 0deg));
-  filter: drop-shadow(0 0.03em 0.045em color-mix(in srgb, var(--color-navy) 30%, transparent));
 }
 
-.tk-pic.buzz {
+.tk-pic.buzz::after {
   background:
     url("/assets/art/buzz.svg") center / auto 81.25% no-repeat,
     url("/assets/art/stickers/buzz-edge.svg") center / contain no-repeat;
+}
+
+/* The shadow is the icon's silhouette under it rather than a drop-shadow on the icon, because an iPhone redrawing
+   a filtered icon as the page moves drops it for a frame; only this faint layer carries a filter. The blur sits on
+   the wrapper since a filter runs before the mask on the same element. */
+.sh {
+  position: absolute;
+  inset: 0;
+  translate: 0 var(--sh-y);
+  filter: blur(var(--sh-blur));
+}
+
+.sh > span {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--color-navy) 20%, transparent);
+  mask-position: center;
+  mask-size: contain;
+  mask-repeat: no-repeat;
 }
 
 .tk.cyc .tk-pic {
@@ -1080,6 +1146,7 @@ footer > .bx {
     inset: auto;
     min-height: 100dvh;
     transform: none;
+    will-change: auto;
   }
 
   .scene.split {
@@ -1109,10 +1176,19 @@ footer > .bx {
     display: none;
   }
 
-  .tk,
-  .lp-reveal,
-  .lp-send > span {
+  .tk {
     transition: none;
+  }
+
+  .lp-reveal {
+    transition: opacity 120ms var(--ease-out-quint);
+  }
+
+  .lp-send > span,
+  .lp-send > span + span,
+  .lp-send[data-slow] > span:first-child {
+    translate: none;
+    transition: opacity 120ms var(--ease-out-quint);
   }
 }
 

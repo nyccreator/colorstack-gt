@@ -27,6 +27,7 @@
     opacity 0.22s,
     translate 0.4s var(--ease-move),
     background-color 0.18s,
+    scale 0.1s,
     visibility 0s linear 0.4s;
 }
 
@@ -44,6 +45,7 @@
     opacity 0.22s,
     translate 0.4s var(--ease-move),
     background-color 0.18s,
+    scale 0.1s,
     visibility 0s;
 }
 
@@ -72,6 +74,12 @@
 
 .you .back:active {
   background: color-mix(in srgb, var(--color-diploma) 13%, var(--color-navy));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .you .back:active {
+    scale: 0.97;
+  }
 }
 
 @media (hover: hover) {
@@ -324,7 +332,6 @@ html:has(.you) {
   min-height: 64px;
   padding: 10px 16px;
   border-radius: 20px;
-  -webkit-tap-highlight-color: transparent;
   transition: background-color 0.18s;
 }
 
@@ -527,9 +534,25 @@ html:has(.you) {
   --pad: calc(var(--rp) + 4px);
   --lc: calc(var(--lw) + 16px - var(--fp));
   border-radius: 28px;
-  transition:
-    background-color 0.2s cubic-bezier(0.2, 0, 0, 1),
-    box-shadow 0.2s cubic-bezier(0.2, 0, 0, 1);
+  position: relative;
+  isolation: isolate;
+}
+
+.you .grp::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--color-diploma) 6%, transparent);
+  box-shadow: 0 14px 32px -18px color-mix(in srgb, var(--color-navy) 60%, transparent);
+  opacity: 0;
+  transition: opacity 0.2s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.you .grp.open::before {
+  opacity: 1;
 }
 
 .you .grp + .grp {
@@ -538,8 +561,6 @@ html:has(.you) {
 
 .you .grp.open {
   padding: var(--pad) var(--pad) calc(var(--pad) - 4px);
-  background: color-mix(in srgb, var(--color-diploma) 6%, transparent);
-  box-shadow: 0 14px 32px -18px color-mix(in srgb, var(--color-navy) 60%, transparent);
   outline: 1px solid transparent;
 }
 
@@ -652,7 +673,6 @@ html:has(.you) {
   border-radius: 20px;
   text-align: left;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
   transition: background-color 0.15s;
 }
 
@@ -1337,10 +1357,8 @@ html:has(.you) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .you *,
-  .you *::before,
-  .you *::after,
-  .pages-dock {
-    transition: none !important;
+  .you .back,
+  .you:has(.grp.open) .pages-dock {
+    translate: -50% 0;
   }
 }
