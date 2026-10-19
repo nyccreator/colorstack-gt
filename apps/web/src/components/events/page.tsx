@@ -5,7 +5,7 @@ import { DESK, PHONE, useMedia } from "@/lib/media";
 
 import { Bar, Pages } from "../frame";
 import { EVENTS } from "./data";
-import { away, Details, type Fit, fitStack, Nothing, Picture, stackShape, Zoom } from "./detail";
+import { Actions, away, Details, type Fit, fitStack, Nothing, Picture, stackShape } from "./detail";
 import { Gallery, Skeletons } from "./gallery";
 import { View } from "./view";
 
@@ -23,7 +23,10 @@ function useViewport() {
 
 const column = (w: number) => Math.max(300, Math.min(330, 0.22 * w));
 const columnGap = (w: number) => Math.max(40, Math.min(64, 0.045 * w));
-const rowFor = (w: number, cap = 300) => Math.max(180, Math.min(300, w / 2.9, cap));
+// Every gallery row is one height: the lowest at which a 3:4 flier, the narrowest shape Instagram's feed
+// shows, still fits its whole caption of date, QR and Add (phones' caption type is smaller).
+const ROW = 264;
+const PHONE_ROW = 240;
 
 export function EventsPage({ picked }: { picked?: string }) {
   const navigate = useNavigate();
@@ -162,14 +165,7 @@ export function EventsPage({ picked }: { picked?: string }) {
   }
 
   const gap = phone ? 16 : 24;
-  const fitsScreen = desk ? Infinity : Math.max(180, viewport.h - 230);
-  const target = Math.min(
-    phone
-      ? Math.round(Math.min(220, 0.5 * viewport.w))
-      : rowFor(width, fit ? 0.875 * fit.width : 300),
-    fitsScreen,
-  );
-  const grid = { width, gap, target, phone };
+  const grid = { width, gap, row: phone ? PHONE_ROW : ROW, phone };
 
   function content() {
     if (upcoming.length) {
@@ -210,7 +206,7 @@ export function EventsPage({ picked }: { picked?: string }) {
           <Picture event={NONE} width={w} height={Math.min(w / 1.6, 0.3 * viewport.h)} />
           <Nothing />
         </div>
-        <Skeletons box={skeletons} {...grid} width={rest} target={rowFor(rest)} />
+        <Skeletons box={skeletons} {...grid} width={rest} />
       </div>
     );
   }
@@ -243,7 +239,7 @@ export function EventsPage({ picked }: { picked?: string }) {
                     width={fit.width}
                     height={fit.width / stackShape(selected)}
                   >
-                    <Zoom event={selected} />
+                    <Actions event={selected} mode="corner" />
                   </Picture>
                   <Details
                     key={selected.id}
