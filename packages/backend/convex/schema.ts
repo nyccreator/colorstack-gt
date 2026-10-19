@@ -11,12 +11,7 @@ export const classStanding = v.union(
   v.literal("phd"),
 );
 
-export const season = v.union(
-  v.literal("spring"),
-  v.literal("summer"),
-  v.literal("fall"),
-  v.literal("winter"),
-);
+export const season = v.union(v.literal("spring"), v.literal("summer"), v.literal("fall"));
 
 export const gpaRange = v.union(
   v.literal("below_2_5"),
