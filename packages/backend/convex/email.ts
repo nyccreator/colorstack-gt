@@ -1,13 +1,14 @@
 import { v } from "convex/values";
 
 import { internalAction } from "./_generated/server";
+import { SITE_URL } from "./env";
 import { OTP_EXPIRY_SECONDS } from "./lib/config";
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
 function isDevelopment(): boolean {
   try {
-    const { hostname } = new URL(process.env.SITE_URL ?? "");
+    const { hostname } = new URL(SITE_URL);
     return hostname === "localhost" || hostname === "127.0.0.1";
   } catch {
     return false;
@@ -24,6 +25,7 @@ const body = (code: string) =>
 
 export const sendCode = internalAction({
   args: { email: v.string(), code: v.string() },
+  returns: v.null(),
   handler: async (_ctx, { email, code }) => {
     const apiKey = process.env.RESEND_API_KEY;
     const from = process.env.EMAIL_FROM;
@@ -31,11 +33,11 @@ export const sendCode = internalAction({
     if (!apiKey || !from) {
       if (!isDevelopment()) {
         throw new Error(
-          `No mail provider configured on ${process.env.SITE_URL}. Set RESEND_API_KEY and EMAIL_FROM on this deployment. Sign-in codes are never written to its logs.`,
+          `No mail provider configured on ${SITE_URL}. Set RESEND_API_KEY and EMAIL_FROM on this deployment. Sign-in codes are never written to its logs.`,
         );
       }
       console.info(`No mail provider configured. Sign-in code for ${email}: ${code}`);
-      return;
+      return null;
     }
 
     const response = await fetch(RESEND_ENDPOINT, {
@@ -55,5 +57,6 @@ export const sendCode = internalAction({
     if (!response.ok) {
       throw new Error(`Resend rejected the message: ${response.status} ${await response.text()}`);
     }
+    return null;
   },
 });

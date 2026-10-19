@@ -1,5 +1,7 @@
 import { defineSchema, defineTable } from "convex/server";
-import { v } from "convex/values";
+import { v, type VBoolean } from "convex/values";
+
+import { type Group, OPTIONAL } from "./lib/groups";
 
 export const classStanding = v.union(
   v.literal("first_year"),
@@ -113,15 +115,30 @@ export const interestFields = {
   hobbies: v.array(hobby),
 };
 
+export const memberGroups = {
+  name: v.optional(v.object(nameFields)),
+  contact: v.optional(v.object(contactFields)),
+  studies: v.optional(v.object(studiesFields)),
+  materials: v.optional(v.object(materialsFields)),
+  interests: v.optional(v.object(interestFields)),
+};
+
+export const optionalGroup = v.union(...OPTIONAL.map((group) => v.literal(group)));
+
+export const groupFlags = v.object({
+  name: v.boolean(),
+  contact: v.boolean(),
+  studies: v.boolean(),
+  materials: v.boolean(),
+  interests: v.boolean(),
+  background: v.boolean(),
+} satisfies Record<Group, VBoolean>);
+
 export default defineSchema({
   members: defineTable({
     userId: v.string(),
     step: v.number(),
-    name: v.optional(v.object(nameFields)),
-    contact: v.optional(v.object(contactFields)),
-    studies: v.optional(v.object(studiesFields)),
-    materials: v.optional(v.object(materialsFields)),
-    interests: v.optional(v.object(interestFields)),
+    ...memberGroups,
     resume: v.optional(
       v.object({ storageId: v.id("_storage"), name: v.string(), size: v.number() }),
     ),

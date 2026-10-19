@@ -1,11 +1,4 @@
-import {
-  type CSSProperties,
-  type RefObject,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { MOVE, still } from "@/lib/motion";
 
@@ -14,29 +7,24 @@ import { Details, type Fit, fitStack, Picture, stackShape, Zoom } from "./detail
 
 const home = { transform: "none", clipPath: "inset(0 0 round 0px)" };
 
-// The transform that draws an element laid out at r0 over the rect r. A flier keeps its shape all the way; a sticker's
-// box changes shape between tile and page, so it scales evenly and its sides are clipped to the tile instead.
-function flight(r0: DOMRect, r: DOMRect, even: boolean) {
+function flight(r0: DOMRect, r: DOMRect, round = 0) {
   const x = r.left - r0.left;
   const y = r.top - r0.top;
-  if (!even)
-    return {
-      transform: `translate(${x}px, ${y}px) scale(${r.width / r0.width}, ${r.height / r0.height})`,
-      clipPath: home.clipPath,
-    };
+  const sx = r.width / r0.width;
   const s = r.height / r0.height;
+  if (Math.abs(sx / s - 1) < 0.01)
+    return { transform: `translate(${x}px, ${y}px) scale(${sx}, ${s})`, clipPath: home.clipPath };
   const side = (r0.width * s - r.width) / 2;
   return {
     transform: `translate(${x - side}px, ${y}px) scale(${s})`,
-    clipPath: `inset(0 ${side / s}px round ${16 / s}px)`,
+    clipPath: `inset(0 ${side / s}px round ${round / s}px)`,
   };
 }
+const radius = (el: Element) => parseFloat(getComputedStyle(el).borderTopLeftRadius);
+const DRAG_START = 8;
 const tileOf = (id: string) =>
   document.querySelector<HTMLElement>(`.gal [data-event="${CSS.escape(id)}"]`);
 
-// Phones and tablets: a picked event grows out of its flier over the page, one event a page. Sideways moves between
-// events, and down returns to the gallery as the flier flies back into its place, however the member leaves. The × and
-// every event's flier sit in one bar where the Events and You switch was.
 export function View({
   events,
   start,
@@ -44,7 +32,7 @@ export function View({
   next,
   probe,
   grow,
-  away,
+  routed,
   onPage,
   onClose,
   onGone,
@@ -55,9 +43,9 @@ export function View({
   next?: ClubEvent;
   probe: RefObject<HTMLDivElement | null>;
   grow: boolean;
-  away: boolean;
+  routed: boolean;
   onPage: (id: string) => void;
-  onClose: (id: string) => void;
+  onClose: () => void;
   onGone: (id: string) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -69,6 +57,7 @@ export function View({
   const here = useRef(start);
   const shown = useRef(false);
   const leaving = useRef(false);
+  const refocus = useRef(false);
 
   useLayoutEffect(() => {
     const d = dialog.current!;
@@ -86,9 +75,9 @@ export function View({
       removeEventListener("resize", measure);
       d.close();
     };
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- The dialog fits once as it mounts and again on resize; the events and probe it was given do not change meanwhile.
   }, []);
 
-  // The strip of fliers fades at an edge that has more beyond it.
   const edges = () => {
     const r = reel.current;
     if (!r) return;
@@ -106,7 +95,6 @@ export function View({
     edges();
   };
 
-  // The tapped event's flier starts where its tile sits in the gallery; the rest fades up around it.
   useLayoutEffect(() => {
     const t = track.current!;
     if (!fit) return;
@@ -139,20 +127,26 @@ export function View({
       );
     if (from)
       p.animate(
-        [
-          flight(p.getBoundingClientRect(), from.getBoundingClientRect(), !events[start]!.flier),
-          home,
-        ],
+        [flight(p.getBoundingClientRect(), from.getBoundingClientRect(), radius(from)), home],
         { duration: 420, easing: MOVE },
       );
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- This runs once, when the first fit lands, with the event and flight the dialog opened with.
   }, [fit]);
 
   useEffect(() => centre(at, true), [at]);
 
-  // Back in the browser takes the event away too, and it leaves the same way.
+  // Paging makes the page that held focus inert, so focus follows to the new page's title.
+  useLayoutEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    track.current?.children[at]?.querySelector<HTMLElement>(".ttl")?.focus({ preventScroll: true });
+  }, [at]);
+
   useEffect(() => {
-    if (away) close(true);
-  }, [away]);
+    // oxlint-disable-next-line react/immutability -- flyBack is a hoisted function by the time the effect runs.
+    if (!routed) flyBack();
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- The flight starts only when the address stops naming the event.
+  }, [routed]);
 
   const go = (k: number) => {
     const t = track.current!;
@@ -164,23 +158,30 @@ export function View({
     const t = track.current!;
     const k = Math.round(t.scrollLeft / t.clientWidth);
     if (k === here.current || leaving.current || !events[k]) return;
+    dialog.current?.querySelector<HTMLElement>(":popover-open")?.hidePopover();
+    const focus = document.activeElement;
+    refocus.current = focus === dialog.current || !!t.children[here.current]?.contains(focus);
     here.current = k;
     setAt(k);
     onPage(events[k].id);
   }
 
-  // The event looked at last comes into view in the gallery behind, then its flier flies back to it.
-  function close(gone = false) {
+  function close() {
     if (leaving.current) return;
     leaving.current = true;
+    dialog.current?.querySelector<HTMLElement>(":popover-open")?.hidePopover();
+    onClose();
+  }
+
+  // Close only navigates, so the flight starts once the router has restored the page's scroll and its tile stays put.
+  function flyBack() {
+    leaving.current = true;
+    dialog.current?.querySelector<HTMLElement>(":popover-open")?.hidePopover();
     const k = here.current;
     const event = events[k]!;
     const tile = tileOf(event.id);
     tile?.scrollIntoView({ block: "nearest", inline: "nearest" });
-    const done = () => {
-      if (!gone) onClose(event.id);
-      onGone(event.id);
-    };
+    const done = () => onGone(event.id);
     if (still()) return done();
     const d = dialog.current!;
     const inner = (track.current!.children[k] as HTMLElement).firstElementChild as HTMLElement;
@@ -190,7 +191,7 @@ export function View({
     const fade = parseFloat(getComputedStyle(bg).opacity);
     inner.style.transform = "";
     const r0 = p.getBoundingClientRect();
-    const to = tile?.querySelector(".pic")?.getBoundingClientRect();
+    const slot = tile?.querySelector(".pic");
     bg.animate([{ opacity: fade }, { opacity: 0 }], {
       duration: 300,
       easing: "ease-in",
@@ -204,8 +205,8 @@ export function View({
         duration: 140,
         fill: "forwards",
       });
-    const flying = to
-      ? p.animate([flight(r0, was, false), flight(r0, to, !event.flier)], {
+    const flying = slot
+      ? p.animate([flight(r0, was), flight(r0, slot.getBoundingClientRect(), radius(slot))], {
           duration: 340,
           easing: MOVE,
           fill: "forwards",
@@ -214,8 +215,8 @@ export function View({
     void flying.finished.then(done, done);
   }
 
-  // Pulling down from a page at its top closes: the event shrinks a little as it follows the finger, with the gallery
-  // showing through. A short pull springs back. Sideways stays the track's.
+  // Pulling only starts at a page's top and when the drag is more down than sideways, so scrolling and swiping
+  // still work.
   useEffect(() => {
     const t = track.current!;
     const d = dialog.current!;
@@ -240,12 +241,10 @@ export function View({
       const down = e.touches[0]!.clientY - y0;
       const side = e.touches[0]!.clientX - x0;
       if (!pulling) {
-        if (Math.abs(side) > Math.abs(down)) return void (y0 = null);
-        if (down > 0 && page().scrollTop <= 0) pulling = true;
-        else {
-          if (Math.abs(down) > 6) y0 = null;
-          return;
-        }
+        if (Math.abs(side) < DRAG_START && Math.abs(down) < DRAG_START) return;
+        if (Math.abs(side) > Math.abs(down) || down < 0 || page().scrollTop > 0)
+          return void (y0 = null);
+        pulling = true;
       }
       if (e.cancelable) e.preventDefault();
       dy = Math.max(0, down);
@@ -275,6 +274,7 @@ export function View({
       t.removeEventListener("touchend", end);
       t.removeEventListener("touchcancel", end);
     };
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- The swipe listeners attach once, and close is guarded by `leaving` and only navigates.
   }, []);
 
   return (
@@ -283,7 +283,7 @@ export function View({
       className="view"
       aria-label="Upcoming events"
       tabIndex={-1}
-      style={fit ? ({ "--w": `${fit.width}px`, "--t": fit.t } as CSSProperties) : undefined}
+      style={fit ? { "--w": `${fit.width}px`, "--t": fit.t } : undefined}
       onCancel={(e) => {
         e.preventDefault();
         close();
@@ -305,13 +305,7 @@ export function View({
                   <Picture event={e} width={fit.width} height={fit.width / stackShape(e)}>
                     <Zoom event={e} />
                   </Picture>
-                  <Details
-                    event={e}
-                    now={now}
-                    next={e === next}
-                    eyebrow
-                    narrow={fit.width / fit.t < 300}
-                  />
+                  <Details event={e} now={now} next={e === next} eyebrow />
                 </>
               ) : null}
             </div>
@@ -319,12 +313,7 @@ export function View({
         ))}
       </div>
       <div className="ctl">
-        <button
-          type="button"
-          className="cl"
-          aria-label="Back to the gallery"
-          onClick={() => close()}
-        >
+        <button type="button" className="cl" aria-label="Back to the gallery" onClick={close}>
           <i className="ic x" aria-hidden />
         </button>
         {events.length > 1 ? (
@@ -342,7 +331,7 @@ export function View({
                 >
                   <span className="th">
                     {e.flier ? (
-                      <img src={e.flier.src} alt="" />
+                      <img src={e.flier.src} loading="lazy" alt="" />
                     ) : (
                       <img className="st" src={`/assets/art/stickers/${e.art}.svg`} alt="" />
                     )}
@@ -353,6 +342,7 @@ export function View({
           </>
         ) : null}
       </div>
+      <p className="sr-only" role="status" />
     </dialog>
   );
 }

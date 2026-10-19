@@ -1,18 +1,13 @@
 import { isGeorgiaTechEmail, normalizeEmail } from "@colorstack-gt/backend/convex/lib/identity";
+import { MESSAGES } from "@colorstack-gt/backend/convex/lib/messages";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import {
-  type CSSProperties,
-  type FormEvent,
-  type RefObject,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { type FormEvent, type RefObject, useEffect, useRef, useState } from "react";
 
-import { NO_EMAIL, sendCode, WRONG_DOMAIN } from "@/components/gate";
+import { sendCode } from "@/components/gate";
 import { Mark } from "@/components/mark";
 import { Message } from "@/components/message";
 import { startTokens } from "@/components/tokens";
+import { useSlow } from "@/lib/motion";
 
 export const Route = createFileRoute("/")({
   component: Landing,
@@ -51,18 +46,21 @@ const OFFERS = [
         detail:
           "Set-aside time and a room to work through your own coursework with other members nearby.",
         ground: "bg-burdell text-navy",
+        tone: "navy",
         icon: "study",
       },
       {
         title: "Workshops",
         detail: "Sessions on data structures, system design, and the tools you’ll use on the job.",
         ground: "bg-navy text-diploma",
+        tone: "diploma",
         icon: "workshop",
       },
       {
         title: "Mentoring",
         detail: "Get paired with a student further along in the degree.",
         ground: "bg-diploma text-navy",
+        tone: "navy",
         icon: "mentor",
       },
     ],
@@ -79,18 +77,21 @@ const OFFERS = [
         title: "Company events",
         detail: "Companies come to us, so you can meet recruiters without the career fair crowd.",
         ground: "bg-navy text-diploma",
+        tone: "diploma",
         icon: "company",
       },
       {
         title: "Panels",
         detail: "Students and alumni talk openly about how they got their offers.",
         ground: "bg-diploma text-navy",
+        tone: "navy",
         icon: "panel",
       },
       {
         title: "Resume book",
         detail: "We collect member resumes and share them with our partner companies.",
         ground: "bg-blue-bright text-diploma",
+        tone: "diploma",
         icon: "resume",
       },
     ],
@@ -106,12 +107,14 @@ const OFFERS = [
         title: "Mixers",
         detail: "Light networking with other members and the e-board.",
         ground: "bg-burdell text-navy",
+        tone: "navy",
         icon: "mixer",
       },
       {
         title: "Hangouts",
         detail: "Time together around a shared hobby.",
         ground: "bg-diploma text-navy",
+        tone: "navy",
         icon: "hangout",
       },
     ],
@@ -124,7 +127,7 @@ const PLAN = [
   { name: "learn", enter: 2, exit: 4, split: 3 },
   { name: "hired", enter: 4, exit: 6, split: 5 },
   { name: "belong", enter: 6, exit: 8, split: 7 },
-  { name: "ask", enter: 8, split: 9 },
+  { name: "ask", enter: 8, split: 9, rest: 9 },
 ] as const;
 
 const LIFT = 22;
@@ -133,30 +136,37 @@ const SETTLES = Math.max(...PLAN.map((part) => ("split" in part ? part.split : p
 const clamp01 = (value: number) => (value < 0 ? 0 : value > 1 ? 1 : value);
 const step = (progress: number, to: number) => clamp01(progress - (to - 1));
 
-const tones = new Map<string, number>();
+const tones = new Map<string, { luma: number; clear: boolean }>();
 let swatch: CanvasRenderingContext2D | null | undefined;
 
-function luminance(color: string): number {
+function probe(color: string) {
   const known = tones.get(color);
-  if (known !== undefined) return known;
+  if (known) return known;
   if (swatch === undefined) {
     const canvas = document.createElement("canvas");
     canvas.width = canvas.height = 1;
     swatch = canvas.getContext("2d", { willReadFrequently: true });
   }
-  if (!swatch) return 1;
-  swatch.fillStyle = "#ffffff";
-  swatch.fillRect(0, 0, 1, 1);
+  if (!swatch) return { luma: 1, clear: false };
+  swatch.clearRect(0, 0, 1, 1);
   swatch.fillStyle = color;
   swatch.fillRect(0, 0, 1, 1);
+  const alpha = swatch.getImageData(0, 0, 1, 1).data[3];
+  swatch.globalCompositeOperation = "destination-over";
+  swatch.fillStyle = "#ffffff";
+  swatch.fillRect(0, 0, 1, 1);
+  swatch.globalCompositeOperation = "source-over";
   const [r = 255, g = 255, b = 255] = swatch.getImageData(0, 0, 1, 1).data;
   const channel = (value: number) => {
     const ratio = value / 255;
     return ratio <= 0.03928 ? ratio / 12.92 : Math.pow((ratio + 0.055) / 1.055, 2.4);
   };
-  const value = 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
-  tones.set(color, value);
-  return value;
+  const tone = {
+    luma: 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b),
+    clear: alpha === 0,
+  };
+  tones.set(color, tone);
+  return tone;
 }
 
 function useStage(root: RefObject<HTMLDivElement | null>) {
@@ -181,10 +191,10 @@ function useStage(root: RefObject<HTMLDivElement | null>) {
     const groundAt = (x: number, y: number) => {
       for (const element of document.elementsFromPoint(x, y)) {
         if (band.contains(element)) continue;
-        const color = getComputedStyle(element).backgroundColor;
-        if (color && color !== "transparent" && !/,\s*0\)$/.test(color)) return color;
+        const ground = probe(getComputedStyle(element).backgroundColor);
+        if (!ground.clear) return ground.luma;
       }
-      return "rgb(249, 246, 229)";
+      return probe("rgb(249, 246, 229)").luma;
     };
 
     const tone = () => {
@@ -193,66 +203,88 @@ function useStage(root: RefObject<HTMLDivElement | null>) {
         if (!part.offsetParent) continue;
         const rect = part.getBoundingClientRect();
         const x = Math.min(innerWidth - 2, Math.max(2, (rect.left + rect.right) / 2));
-        part.classList.toggle("on-dark", luminance(groundAt(x, box.bottom + 2)) < 0.25);
+        part.classList.toggle("on-dark", groundAt(x, box.bottom + 2) < 0.25);
       }
     };
 
+    const handed = new Map<string, number>();
     const draw = () => {
-      if (!still.matches) {
-        const unit = stride();
-        const raw = window.scrollY / unit;
-        const stop = Math.round(raw);
-        const progress = Math.abs(raw - stop) * unit < 1 ? stop : raw;
-        for (const scene of scenes) {
-          if (!scene.el) continue;
-          const into = scene.enter === 0 ? 1 : step(progress, scene.enter);
-          const out = "exit" in scene ? step(progress, scene.exit) : 0;
-          scene.el.style.setProperty("--y", `${(1 - into) * 100 - out * LIFT}%`);
-          if ("split" in scene) {
-            const t = step(progress, scene.split);
-            scene.el.style.setProperty("--t", t.toFixed(4));
-            tokens.hand(scene.el, t);
-          }
-        }
-      } else {
+      if (still.matches) {
         for (const scene of scenes) {
           scene.el?.style.removeProperty("--y");
           scene.el?.style.removeProperty("--t");
         }
+        tone();
+        return;
+      }
+      const unit = stride();
+      const raw = window.scrollY / unit;
+      const stop = Math.round(raw);
+      const progress = Math.abs(raw - stop) * unit < 1 ? stop : raw;
+      const moved: { el: HTMLElement; name: string; t: number }[] = [];
+      for (const scene of scenes) {
+        if (!scene.el) continue;
+        const into = scene.enter === 0 ? 1 : step(progress, scene.enter);
+        const out = "exit" in scene ? step(progress, scene.exit) : 0;
+        scene.el.style.setProperty("--y", `${(1 - into) * 100 - out * LIFT}%`);
+        if ("split" in scene) {
+          const t = step(progress, scene.split);
+          scene.el.style.setProperty("--t", t.toFixed(4));
+          if (handed.get(scene.name) !== t) moved.push({ el: scene.el, name: scene.name, t });
+        }
+      }
+      for (const { el, name, t } of moved) {
+        handed.set(name, t);
+        tokens.hand(el, t);
       }
       tone();
     };
 
-    let queued = false;
+    let frame = 0;
     const onScroll = () => {
-      if (queued) return;
-      queued = true;
-      requestAnimationFrame(() => {
-        queued = false;
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
         draw();
       });
     };
+    const onResize = () => {
+      handed.clear();
+      onScroll();
+    };
+    const onMotion = () => {
+      handed.clear();
+      draw();
+    };
 
-    // A keyboard moving onto a scene's controls brings the page to the stop where that scene rests.
-    const onFocus = (event: FocusEvent) => {
-      if (still.matches) return;
+    // A click or tap focuses what is already on screen, so only keyboard focus moves the page to a scene's rest.
+    let pointing = false;
+    const onPointer = () => (pointing = true);
+    const onKey = () => (pointing = false);
+    const scrollToFocusedScene = (event: FocusEvent) => {
+      if (still.matches || pointing) return;
       const scene = scenes.find((part) => part.el?.contains(event.target as Node));
       if (!scene) return;
-      const y = (scene.name === "ask" ? scene.split : scene.enter) * stride();
+      const y = ("rest" in scene ? scene.rest : scene.enter) * stride();
       if (Math.abs(window.scrollY - y) > 1) window.scrollTo({ top: y, behavior: "instant" });
     };
 
     draw();
     addEventListener("scroll", onScroll, { passive: true });
-    addEventListener("resize", onScroll);
-    stage.addEventListener("focusin", onFocus);
-    still.addEventListener("change", draw);
+    addEventListener("resize", onResize);
+    addEventListener("pointerdown", onPointer, true);
+    addEventListener("keydown", onKey, true);
+    stage.addEventListener("focusin", scrollToFocusedScene);
+    still.addEventListener("change", onMotion);
     return () => {
+      cancelAnimationFrame(frame);
       tokens.stop();
       removeEventListener("scroll", onScroll);
-      removeEventListener("resize", onScroll);
-      stage.removeEventListener("focusin", onFocus);
-      still.removeEventListener("change", draw);
+      removeEventListener("resize", onResize);
+      removeEventListener("pointerdown", onPointer, true);
+      removeEventListener("keydown", onKey, true);
+      stage.removeEventListener("focusin", scrollToFocusedScene);
+      still.removeEventListener("change", onMotion);
     };
   }, [root]);
 }
@@ -281,7 +313,7 @@ function Token({
           <span
             key={src}
             className={`tk-pic${buzz ? " buzz" : ""}${index === 0 ? " on" : ""}`}
-            style={{ "--art": src, "--r": TILTS[index] } as CSSProperties}
+            style={{ "--art": src, "--r": TILTS[index] }}
           />
         ))}
       </span>
@@ -291,13 +323,14 @@ function Token({
 }
 
 function JoinField({ id }: { id: string }) {
-  const { isAuthenticated } = Route.useRouteContext();
+  const { token } = Route.useRouteContext();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [shown, setShown] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [pending, setPending] = useState(false);
+  const slow = useSlow(pending);
 
   function fail(message: string) {
     setError(message);
@@ -308,7 +341,7 @@ function JoinField({ id }: { id: string }) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!email.trim() || !isGeorgiaTechEmail(email)) {
-      fail(email.trim() ? WRONG_DOMAIN : NO_EMAIL);
+      fail(email.trim() ? MESSAGES.wrongDomain : MESSAGES.noEmail);
       return;
     }
 
@@ -324,7 +357,7 @@ function JoinField({ id }: { id: string }) {
     void navigate({ to: "/join", search: { email: address, sent: true } });
   }
 
-  if (isAuthenticated) {
+  if (token) {
     return (
       <Link to="/hub" className="lp-btn">
         Go to events
@@ -356,10 +389,11 @@ function JoinField({ id }: { id: string }) {
           type="submit"
           disabled={pending}
           aria-busy={pending || undefined}
+          data-slow={slow || undefined}
           className="lp-btn lp-send"
         >
-          <span aria-hidden={pending}>Join</span>
-          <span aria-hidden={!pending}>Sending…</span>
+          <span aria-hidden={slow}>Join</span>
+          <span aria-hidden={!slow}>Sending…</span>
         </button>
       </form>
       <div className="lp-reveal" aria-hidden={!shown}>
@@ -394,13 +428,13 @@ function Offer({ offer, z }: { offer: (typeof OFFERS)[number]; z: string }) {
             <span
               className="it-st"
               aria-hidden
-              style={{ "--art": sticker(item.icon), "--r": TILTS[index] } as CSSProperties}
+              style={{ "--art": sticker(item.icon), "--r": TILTS[index] }}
             />
             <div className="it-tx">
-              <b className="it-t type-heading text-item-title">{item.title}</b>
+              <b className="it-t type-display text-item-title">{item.title}</b>
               <p
                 className={`it-d text-band-body ${
-                  item.ground.includes("text-navy") ? "text-navy/70" : "text-diploma/86"
+                  item.tone === "navy" ? "text-navy/70" : "text-diploma/86"
                 }`}
               >
                 {item.detail}
@@ -414,8 +448,7 @@ function Offer({ offer, z }: { offer: (typeof OFFERS)[number]; z: string }) {
 }
 
 function Landing() {
-  const { isAuthenticated } = Route.useRouteContext();
-  const [learn, hired, belong] = OFFERS;
+  const { token } = Route.useRouteContext();
   const root = useRef<HTMLDivElement>(null);
 
   useStage(root);
@@ -435,7 +468,7 @@ function Landing() {
               <Mark mark="lockup" className="nav-lock nav-lock-over" />
             </Link>
             <div className="nav-acts on-dark" data-tone>
-              {isAuthenticated ? (
+              {token ? (
                 <Link to="/hub" className="lp-link type-nav">
                   Events
                 </Link>
@@ -488,13 +521,11 @@ function Landing() {
                       role={copy === 0 ? "img" : undefined}
                       aria-label={copy === 0 ? partner.name : undefined}
                       aria-hidden={copy > 0 || undefined}
-                      style={
-                        {
-                          "--hr": partner.height,
-                          "--src": `url(${partner.src})`,
-                          aspectRatio: partner.shape,
-                        } as CSSProperties
-                      }
+                      style={{
+                        "--hr": partner.height,
+                        "--src": `url(${partner.src})`,
+                        aspectRatio: partner.shape,
+                      }}
                     />
                   )),
                 )}
@@ -527,9 +558,9 @@ function Landing() {
             </div>
           </section>
 
-          {learn ? <Offer offer={learn} z="sc-3" /> : null}
-          {hired ? <Offer offer={hired} z="sc-4" /> : null}
-          {belong ? <Offer offer={belong} z="sc-5" /> : null}
+          {OFFERS.map((offer, index) => (
+            <Offer key={offer.scene} offer={offer} z={`sc-${index + 3}`} />
+          ))}
 
           <section className="scene sc-6 split" data-scene="ask">
             <div className="s-ask on-dark bg-blue-bright text-diploma">
@@ -588,12 +619,7 @@ function Landing() {
           </section>
         </div>
         {Array.from({ length: SETTLES }, (_, index) => (
-          <span
-            key={index}
-            aria-hidden
-            className="snap"
-            style={{ "--k": index } as CSSProperties}
-          />
+          <span key={index} aria-hidden className="snap" style={{ "--k": index }} />
         ))}
       </div>
     </div>

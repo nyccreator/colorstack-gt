@@ -1,3 +1,7 @@
+import type { Infer } from "convex/values";
+
+import type { classStanding } from "../schema";
+
 /** From gatech.edu/academics/all-degree-programs. */
 export const DEGREE_PROGRAMS = {
   bachelors: [
@@ -148,7 +152,9 @@ export const DEGREE_PROGRAMS = {
 
 export type DegreeLevel = keyof typeof DEGREE_PROGRAMS;
 
-export function degreeLevel(standing: string): DegreeLevel {
+type ClassStanding = Infer<typeof classStanding>;
+
+export function degreeLevel(standing: ClassStanding): DegreeLevel {
   if (standing === "masters") return "masters";
   if (standing === "phd") return "doctoral";
   return "bachelors";

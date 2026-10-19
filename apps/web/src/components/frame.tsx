@@ -1,43 +1,47 @@
 import { Link, useLocation, useNavigate, useRouter } from "@tanstack/react-router";
 import { type MouseEvent, type ReactNode, useState } from "react";
 
-import { authClient } from "@/lib/auth-client";
 import { useSlow } from "@/lib/motion";
-import { forgetSession } from "@/lib/session";
+import { signOut } from "@/lib/session";
 
 import Loader from "./loader";
 import { Mark } from "./mark";
 
-// A page still loading after a moment says so, under the bar, rather than staying blank.
 export function Waiting({ under = true }: { under?: boolean }) {
   return <div className={under ? "pt-page" : ""}>{useSlow(true) ? <Loader /> : null}</div>;
 }
 
-// A page with unsaved changes reports them here, so every way of leaving it, Sign out included, asks first.
-export const unsavedWork = { check: () => false };
-export const mayLeave = () =>
-  !unsavedWork.check() || window.confirm("You have unsaved changes. Leave without saving them?");
+export const mayLeave = (unsaved?: () => boolean) =>
+  !unsaved?.() || window.confirm("You have unsaved changes. Leave without saving them?");
 
-function SignOut() {
+// A modal dialog makes the page's region inert, so a speaker inside one uses the dialog's own.
+export function announce(from: Element | string, text: string) {
+  const status =
+    typeof from === "string"
+      ? document.getElementById(from)
+      : (from.closest("dialog[open]") ?? document).querySelector("[role=status]");
+  if (!status) return;
+  status.textContent = "";
+  setTimeout(() => (status.textContent = text), 50);
+}
+
+function SignOut({ unsaved }: { unsaved?: () => boolean }) {
   const router = useRouter();
   const navigate = useNavigate();
   const [pending, setPending] = useState(false);
   const slow = useSlow(pending);
 
-  async function signOut() {
-    if (!mayLeave()) return;
+  async function leave() {
+    if (!mayLeave(unsaved)) return;
     setPending(true);
-    const { error } = await authClient.signOut().catch(() => ({ error: true }));
-    if (error) return setPending(false);
-    forgetSession();
-    await router.invalidate();
+    if (!(await signOut(router))) return setPending(false);
     await navigate({ to: "/", ignoreBlocker: true });
   }
 
   return (
     <button
       type="button"
-      onClick={signOut}
+      onClick={leave}
       disabled={pending}
       className="pointer-events-auto -my-2 -mr-link-x flex h-12 flex-none cursor-pointer items-center rounded-full px-link-x type-nav text-diploma/70 transition-[background-color,color] hover:bg-diploma/13 hover:text-diploma focus-visible:text-diploma active:bg-diploma/13 disabled:cursor-wait"
     >
@@ -48,7 +52,7 @@ function SignOut() {
 
 export function Pages({ dock }: { dock?: boolean }) {
   const path = useLocation({ select: (location) => location.pathname });
-  // The page you're on is not a way anywhere, and following it would drop an open editor from the address.
+  // A link to the page you're on does nothing, since following it would close what's open there.
   const stay = (to: string) => (to === path ? (e: MouseEvent) => e.preventDefault() : undefined);
   return (
     <nav aria-label="Pages" className={dock ? "pages pages-dock" : "pages"}>
@@ -64,10 +68,12 @@ export function Pages({ dock }: { dock?: boolean }) {
 
 export function Bar({
   signOut,
+  unsaved,
   nav,
   className = "",
 }: {
   signOut?: boolean;
+  unsaved?: () => boolean;
   nav?: ReactNode;
   className?: string;
 }) {
@@ -87,7 +93,7 @@ export function Bar({
           {nav}
         </div>
       ) : null}
-      {signOut ? <SignOut /> : null}
+      {signOut ? <SignOut unsaved={unsaved} /> : null}
     </header>
   );
 }

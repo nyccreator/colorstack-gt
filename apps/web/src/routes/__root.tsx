@@ -1,6 +1,3 @@
-import { ConvexBetterAuthProvider } from "@convex-dev/better-auth/react";
-import type { ConvexQueryClient } from "@convex-dev/react-query";
-import type { QueryClient } from "@tanstack/react-query";
 import {
   createRootRouteWithContext,
   HeadContent,
@@ -10,10 +7,10 @@ import {
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { createServerFn } from "@tanstack/react-start";
+import { ConvexProviderWithAuth, type ConvexReactClient } from "convex/react";
 
-import { authClient } from "@/lib/auth-client";
 import { getToken } from "@/lib/auth-server";
-import { knowSession, sessionToken } from "@/lib/session";
+import { knowSession, sessionToken, useAuth } from "@/lib/session";
 
 import appCss from "../index.css?url";
 
@@ -22,8 +19,7 @@ const getAuth = createServerFn({ method: "GET" }).handler(async () => {
 });
 
 export interface RouterAppContext {
-  queryClient: QueryClient;
-  convexQueryClient: ConvexQueryClient;
+  convex: ConvexReactClient;
 }
 
 export const Route = createRootRouteWithContext<RouterAppContext>()({
@@ -46,15 +42,9 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
   }),
 
   component: RootDocument,
-  beforeLoad: async (ctx) => {
+  beforeLoad: async () => {
     const token = await sessionToken(() => getAuth());
-    if (token) {
-      ctx.context.convexQueryClient.serverHttpClient?.setAuth(token);
-    }
-    return {
-      isAuthenticated: !!token,
-      token,
-    };
+    return { token };
   },
 });
 
@@ -62,11 +52,7 @@ function RootDocument() {
   const context = useRouteContext({ from: Route.id });
   knowSession(context.token);
   return (
-    <ConvexBetterAuthProvider
-      client={context.convexQueryClient.convexClient}
-      authClient={authClient}
-      initialToken={context.token}
-    >
+    <ConvexProviderWithAuth client={context.convex} useAuth={useAuth}>
       <html lang="en">
         <head>
           <HeadContent />
@@ -77,6 +63,6 @@ function RootDocument() {
           <Scripts />
         </body>
       </html>
-    </ConvexBetterAuthProvider>
+    </ConvexProviderWithAuth>
   );
 }

@@ -3,10 +3,13 @@ import type { MouseEvent, Ref } from "react";
 import type { ClubEvent } from "./data";
 import { Add, monthOf, Picture, SHORT, tileShape } from "./detail";
 
-// Rows of one height that fill the width, within one month: a least-squares partition around the target height. A
-// month's last row that can't fill keeps the target height and ends where its fliers end. No tile gets narrower than
-// its caption's date and Add button.
-const NARROWEST = 136;
+const CAPTION_WIDTH = 136;
+const UNFILLED_ROW = 9;
+const UNFILLED_LAST_ROW = 0.4;
+
+// A row with a narrow flier grows until that flier's caption fits, but never past filling the width.
+const captioned = (h: number, shapes: number[], fill = Infinity) =>
+  Math.min(fill, Math.max(h, CAPTION_WIDTH / Math.min(...shapes)));
 
 function justify<X>(
   items: X[],
@@ -29,8 +32,9 @@ function justify<X>(
       narrow = Math.min(narrow, shape(items[j]!));
       const k = i - j;
       const h = (width - (k - 1) * gap) / sum;
-      if ((h < lo || h * narrow < NARROWEST) && k > 1) break;
-      const cost = h > hi ? (i === n ? 0.4 : 9) : ((h - target) / target) ** 2;
+      if ((h < lo || h * narrow < CAPTION_WIDTH) && k > 1) break;
+      const cost =
+        h > hi ? (i === n ? UNFILLED_LAST_ROW : UNFILLED_ROW) : ((h - target) / target) ** 2;
       if (best[j]! + cost < best[i]!) {
         best[i] = best[j]! + cost;
         from[i] = j;
@@ -41,7 +45,7 @@ function justify<X>(
   for (let i = n; i > 0; i = from[i]!) rows.unshift(items.slice(from[i], i));
   return rows.map((row) => {
     const h = (width - (row.length - 1) * gap) / row.reduce((s, x) => s + shape(x), 0);
-    return { items: row, h: h > hi ? target : h };
+    return { items: row, h: h > hi ? target : h, fill: h };
   });
 }
 
@@ -99,7 +103,6 @@ const BARS = [
   [64, 88, 40],
 ] as const;
 
-// A skeleton flier with its caption, as faint shapes.
 function Blank({ shape, h, k, fade = 1 }: { shape: number; h: number; k: number; fade?: number }) {
   const [meta, line, rest] = BARS[k % BARS.length]!;
   return (
@@ -121,8 +124,6 @@ function Blank({ shape, h, k, fade = 1 }: { shape: number; h: number; k: number;
 
 type Grid = { width: number; gap: number; target: number; phone: boolean };
 
-// Skeleton months hold the gallery's shape when there's little or nothing in it. They don't shimmer, since nothing is
-// loading, and they fade out, so they never read as events.
 export function Skeletons({ box, ...grid }: Grid & { box: Ref<HTMLDivElement> }) {
   const month = (shapes: number[], k0: number) => (
     <section className="mon">
@@ -190,24 +191,32 @@ export function Gallery({
     else months.push([label, [e]]);
   }
   const { width, gap, target, phone } = grid;
+  const strip = (list: ClubEvent[]) => {
+    const h = captioned(target, list.map(tileShape));
+    return <div className="strip">{list.map((e) => tile(e, h))}</div>;
+  };
 
-  // A single event leads its month's row, and skeletons fill the rest of it: as many as bring the row nearest its
-  // usual height.
   const lone = (e: ClubEvent) => {
-    if (phone)
+    if (phone) {
+      const h = captioned(target, [tileShape(e)]);
       return (
         <div className="strip still">
-          {tile(e, target)}
-          <Blank shape={0.8} h={target} k={1} fade={0.7} />
-          <Blank shape={1} h={target} k={2} fade={0.4} />
+          {tile(e, h)}
+          <Blank shape={0.8} h={h} k={1} fade={0.7} />
+          <Blank shape={1} h={h} k={2} fade={0.4} />
         </div>
       );
-    const fill = (n: number) =>
+    }
+    const rowHeight = (n: number) =>
       (width - n * gap) / FILL.slice(0, n).reduce((s, a) => s + a, tileShape(e));
     let n = 1;
     for (let k = 2; k <= FILL.length; k++)
-      if (Math.abs(fill(k) - target) < Math.abs(fill(n) - target)) n = k;
-    const h = fill(n);
+      if (
+        rowHeight(k) * tileShape(e) >= CAPTION_WIDTH &&
+        Math.abs(rowHeight(k) - target) < Math.abs(rowHeight(n) - target)
+      )
+        n = k;
+    const h = rowHeight(n);
     return (
       <div className="wall">
         <div className="line">
@@ -237,14 +246,17 @@ export function Gallery({
       {events.length === 1 ? (
         lone(list[0]!)
       ) : phone ? (
-        <div className="strip">{list.map((e) => tile(e, target))}</div>
+        strip(list)
       ) : (
         <div className="wall">
-          {justify(list, tileShape, width, gap, target).map((row) => (
-            <div key={row.items[0]!.id} className="line">
-              {row.items.map((e) => tile(e, row.h))}
-            </div>
-          ))}
+          {justify(list, tileShape, width, gap, target).map((row) => {
+            const h = captioned(row.h, row.items.map(tileShape), row.fill);
+            return (
+              <div key={row.items[0]!.id} className="line">
+                {row.items.map((e) => tile(e, h))}
+              </div>
+            );
+          })}
         </div>
       )}
     </section>

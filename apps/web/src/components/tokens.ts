@@ -24,6 +24,7 @@ type Scope = { tokens: Token[]; next: number; ticked: boolean; timer: number; le
 
 export type Tokens = {
   hand: (scene: HTMLElement, t: number) => void;
+  settle: () => void;
   stop: () => void;
 };
 
@@ -104,7 +105,7 @@ export function startTokens(root: HTMLElement): Tokens {
     enter(el);
   };
 
-  // A scope cycles on its own for one pass, back to where it began, then holds; a tap still moves it on.
+  // A scope cycles by itself for one pass back to its first icons, and a tap ends that pass.
   const arm = (scope: Scope) => {
     clearTimeout(scope.timer);
     scope.timer = 0;
@@ -257,6 +258,13 @@ export function startTokens(root: HTMLElement): Tokens {
           if (!reduce.matches) enter(sticker);
         }, order++ * 80);
       }
+    },
+    settle() {
+      for (const sticker of root.querySelectorAll<HTMLElement>(".it-st")) {
+        sticker.dataset.shown = "";
+        sticker.style.visibility = "";
+      }
+      for (const token of tokens.values()) if (token.bare) dress(token);
     },
     stop() {
       seen.disconnect();

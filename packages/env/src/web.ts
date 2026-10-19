@@ -9,9 +9,9 @@ const convexUrlSchema = (exampleHost: string) =>
 export const env = createEnv({
   clientPrefix: "VITE_",
   client: {
-    VITE_CONVEX_URL: convexUrlSchema("example.convex.cloud"),
-    VITE_CONVEX_SITE_URL: convexUrlSchema("example.convex.site"),
+    VITE_CONVEX_URL: convexUrlSchema("your-deployment.convex.cloud"),
+    VITE_CONVEX_SITE_URL: convexUrlSchema("your-deployment.convex.site"),
   },
-  runtimeEnv: (import.meta as any).env,
+  runtimeEnv: import.meta.env,
   emptyStringAsUndefined: true,
 });

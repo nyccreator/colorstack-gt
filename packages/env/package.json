@@ -13,6 +13,7 @@
   "devDependencies": {
     "@colorstack-gt/config": "workspace:*",
     "@types/node": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vite": "catalog:"
   }
 }

@@ -10,10 +10,10 @@ import { components, internal } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import { internalMutation } from "./_generated/server";
 import authConfig from "./auth.config";
+import { SITE_URL } from "./env";
 import { OTP_ALLOWED_ATTEMPTS, OTP_EXPIRY_SECONDS, OTP_LENGTH, OTP_RATE_LIMIT } from "./lib/config";
 import { isGeorgiaTechEmail, normalizeEmail } from "./lib/identity";
-
-const siteUrl = process.env.SITE_URL!;
+import { MESSAGES } from "./lib/messages";
 
 const SEND = "/email-otp/send-verification-otp";
 const SIGN_IN = "/sign-in/email-otp";
@@ -50,8 +50,8 @@ export const allowCode = internalMutation({
 
 function createAuth(ctx: GenericCtx<DataModel>) {
   return betterAuth({
-    baseURL: siteUrl,
-    trustedOrigins: [siteUrl],
+    baseURL: SITE_URL,
+    trustedOrigins: [SITE_URL],
     database: authComponent.adapter(ctx),
     disabledPaths: UNUSED,
     // Better Auth limits by client IP, which the site's auth proxy hides, so codes are limited per address in allowCode instead.
@@ -62,7 +62,7 @@ function createAuth(ctx: GenericCtx<DataModel>) {
         if (c.path !== SEND && c.path !== SIGN_IN) return;
         const email = c.body?.email;
         if (typeof email !== "string" || !isGeorgiaTechEmail(email)) {
-          throw APIError.fromStatus("BAD_REQUEST", { message: "Use your @gatech.edu email." });
+          throw APIError.fromStatus("BAD_REQUEST", { message: MESSAGES.wrongDomain });
         }
         if (c.path === SIGN_IN) return;
         if (c.body.type !== "sign-in") {
@@ -73,9 +73,7 @@ function createAuth(ctx: GenericCtx<DataModel>) {
           email: normalizeEmail(email),
         });
         if (!allowed) {
-          throw APIError.fromStatus("TOO_MANY_REQUESTS", {
-            message: "Too many codes requested. Wait a minute and try again.",
-          });
+          throw APIError.fromStatus("TOO_MANY_REQUESTS", { message: MESSAGES.tooManyCodes });
         }
       }),
     },

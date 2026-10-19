@@ -1,24 +1,9 @@
-import { api } from "@colorstack-gt/backend/convex/_generated/api";
-import {
-  RESUME_CONTENT_TYPE,
-  RESUME_MAX_BYTES,
-  resumeName,
-  TEXT_MAX_LENGTH,
-} from "@colorstack-gt/backend/convex/lib/config";
-import { toggleRace } from "@colorstack-gt/backend/convex/lib/demographics";
-import { graduationYearOptions } from "@colorstack-gt/backend/convex/lib/graduation";
-import {
-  isPhone,
-  personalEmailError,
-  profileError,
-  profileName,
-  type ProfileSite,
-} from "@colorstack-gt/backend/convex/lib/identity";
+import { RESUME_CONTENT_TYPE, TEXT_MAX_LENGTH } from "@colorstack-gt/backend/convex/lib/config";
+import { PREFER_NOT, toggleRace } from "@colorstack-gt/backend/convex/lib/demographics";
+import type { Group } from "@colorstack-gt/backend/convex/lib/groups";
+import type { ProfileSite } from "@colorstack-gt/backend/convex/lib/identity";
+import { RESUME_LIMIT } from "@colorstack-gt/backend/convex/lib/messages";
 import { DEGREE_PROGRAMS, degreeLevel } from "@colorstack-gt/backend/convex/lib/programs";
-import { env } from "@colorstack-gt/env/web";
-import { useMutation } from "convex/react";
-import type { FunctionReturnType } from "convex/server";
-import { ConvexError } from "convex/values";
 import {
   type FocusEvent,
   type KeyboardEvent,
@@ -29,66 +14,92 @@ import {
   useState,
 } from "react";
 
-import { authClient } from "@/lib/auth-client";
+import type { Profile } from "@/lib/member";
 import { still } from "@/lib/motion";
 
 import { field } from "../gate";
+import { type Draft, type Field, typedName, uploadResume } from "../member/draft";
 import { Message } from "../message";
 import { answer, Chips, Prefixed, Ring, Rows } from "./controls";
 import {
-  type Answers,
   CLASS_STANDINGS,
   GENDERS,
   GPA_RANGES,
   HOBBIES,
-  type Interests,
   LOOKING_FOR,
-  PRONOUNS,
+  PRONOUN_OPTIONS,
   RACES,
   SEASONS,
   SELF_DESCRIBE,
-  type Studies,
+  YEAR_OPTIONS,
   YES_NO,
 } from "./options";
 
-export type Profile = NonNullable<FunctionReturnType<typeof api.members.me>>;
-
-export type Group = "name" | "contact" | "studies" | "materials" | "background" | "interests";
-
-// One question a screen; each group saves with its own mutation when its last question is answered.
 export const QUESTIONS = [
-  { slug: "name", group: "name", title: "What’s your name?" },
-  { slug: "pronouns", group: "name", title: "Your pronouns", pick: true },
-  { slug: "contact", group: "contact", title: "Where can we reach you?" },
-  { slug: "year", group: "studies", title: "What year are you in?", pick: true },
-  { slug: "major", group: "studies", title: "What’s your major?" },
-  { slug: "graduation", group: "studies", title: "When do you graduate?" },
-  { slug: "gpa", group: "studies", title: "What’s your GPA?", pick: true },
-  { slug: "career", group: "materials", title: "Show companies your work", skip: "Skip for now" },
-  { slug: "goals", group: "interests", title: "What are you here for?", skip: "Skip" },
-  { slug: "hobbies", group: "interests", title: "And outside class?", skip: "Skip" },
+  { slug: "name", group: "name", fields: ["firstName", "lastName"], title: "What’s your name?" },
+  {
+    slug: "pronouns",
+    group: "name",
+    fields: ["choice", "writeIn"],
+    title: "Your pronouns",
+    pick: true,
+  },
+  {
+    slug: "contact",
+    group: "contact",
+    fields: ["personalEmail", "phone"],
+    title: "Where can we reach you?",
+  },
+  {
+    slug: "year",
+    group: "studies",
+    fields: ["standing"],
+    title: "What year are you in?",
+    pick: true,
+  },
+  { slug: "major", group: "studies", fields: ["major"], title: "What’s your major?" },
+  {
+    slug: "graduation",
+    group: "studies",
+    fields: ["season", "year"],
+    title: "When do you graduate?",
+  },
+  { slug: "gpa", group: "studies", fields: ["gpa"], title: "What’s your GPA?", pick: true },
+  {
+    slug: "career",
+    group: "materials",
+    fields: ["linkedin", "github"],
+    title: "Show companies your work",
+    skip: "Skip for now",
+  },
+  { slug: "goals", group: "interests", fields: [], title: "What are you here for?", skip: "Skip" },
+  { slug: "hobbies", group: "interests", fields: [], title: "And outside class?", skip: "Skip" },
   {
     slug: "identity",
     group: "background",
+    fields: ["races"],
     title: "How do you identify?",
     note: "Choose all that apply. Kept apart from your profile. Every question here has Prefer not to answer.",
   },
-  { slug: "gender", group: "background", title: "Your gender", pick: true },
+  { slug: "gender", group: "background", fields: ["gender"], title: "Your gender", pick: true },
   {
     slug: "first-gen",
     group: "background",
-    title: "Are you a first‑generation college student?",
+    fields: ["firstGeneration"],
+    title: "Are you a first-generation college student?",
     pick: true,
   },
   {
     slug: "low-income",
     group: "background",
-    title: "Do you come from a low‑income background?",
+    fields: ["lowIncome"],
+    title: "Do you come from a low-income background?",
     pick: true,
   },
 ] as const satisfies readonly {
   slug: string;
   group: Group;
+  fields: readonly Field[];
   title: string;
   note?: string;
   pick?: true;
@@ -97,201 +108,6 @@ export const QUESTIONS = [
 
 export type Question = (typeof QUESTIONS)[number];
 export type Slug = Question["slug"];
-
-export function saved(me: Profile, group: Group) {
-  switch (group) {
-    case "name":
-      return Boolean(me.name);
-    case "contact":
-      return Boolean(me.contact);
-    case "studies":
-      return Boolean(me.studies);
-    case "materials":
-      return Boolean(me.materials || me.resume) || me.step > 3;
-    case "background":
-      return me.reported;
-    case "interests":
-      return Boolean(me.interests) || me.step > 4;
-  }
-}
-
-export type Draft = {
-  firstName: string;
-  lastName: string;
-  choice: string;
-  writeIn: string;
-  personalEmail: string;
-  phone: string;
-  standing: Studies["classStanding"] | "";
-  major: string;
-  minor: string;
-  season: Studies["graduationSeason"] | "";
-  year: string;
-  gpa: Studies["gpa"] | "";
-  linkedin: string;
-  github: string;
-  resumeBook: boolean;
-  races: Answers["raceEthnicity"];
-  gender: Answers["gender"] | "";
-  firstGeneration: Answers["firstGeneration"] | "";
-  lowIncome: Answers["lowIncome"] | "";
-  lookingFor: Interests["lookingFor"];
-  hobbies: Interests["hobbies"];
-};
-
-export function draftFrom(me: Profile, answers: Answers | null): Draft {
-  const pronouns = me.name?.pronouns ?? "";
-  const listed = PRONOUNS.some((option) => option === pronouns && option !== SELF_DESCRIBE);
-  return {
-    firstName: me.name?.firstName ?? "",
-    lastName: me.name?.lastName ?? "",
-    choice: pronouns ? (listed ? pronouns : SELF_DESCRIBE) : "",
-    writeIn: listed ? "" : pronouns,
-    personalEmail: me.contact?.personalEmail ?? "",
-    phone: me.contact?.phone ?? "",
-    standing: me.studies?.classStanding ?? "",
-    major: me.studies?.major ?? "",
-    minor: me.studies?.minor ?? "",
-    season: me.studies?.graduationSeason ?? "",
-    year: me.studies ? String(me.studies.graduationYear) : "",
-    gpa: me.studies?.gpa ?? "",
-    linkedin: profileName("linkedin", me.materials?.linkedin ?? ""),
-    github: profileName("github", me.materials?.github ?? ""),
-    resumeBook: me.materials?.resumeBook ?? false,
-    races: answers?.raceEthnicity ?? [],
-    gender: answers?.gender ?? "",
-    firstGeneration: answers?.firstGeneration ?? "",
-    lowIncome: answers?.lowIncome ?? "",
-    lookingFor: me.interests?.lookingFor ?? [],
-    hobbies: me.interests?.hobbies ?? [],
-  };
-}
-
-const CHOOSE = "Choose an answer.";
-
-// The same rules the mutations apply, keyed by the id of the control each message belongs to.
-export function checksFor(slug: Slug, d: Draft): Record<string, string | undefined> {
-  switch (slug) {
-    case "name":
-      return {
-        "first-name": d.firstName.trim() ? undefined : "Enter your first name.",
-        "last-name": d.lastName.trim() ? undefined : "Enter your last name.",
-      };
-    case "pronouns":
-      return {
-        pronouns: d.choice ? undefined : "Choose your pronouns.",
-        "write-in":
-          d.choice === SELF_DESCRIBE && !d.writeIn.trim() ? "Enter your pronouns." : undefined,
-      };
-    case "contact":
-      return {
-        "personal-email": personalEmailError(d.personalEmail),
-        phone: isPhone(d.phone) ? undefined : "Enter a valid phone number.",
-      };
-    case "year":
-      return { standing: d.standing ? undefined : CHOOSE };
-    case "major":
-      return { major: d.major.trim() ? undefined : "Choose your major." };
-    case "graduation":
-      return {
-        "graduation-season": d.season ? undefined : "Choose a term.",
-        "graduation-year": d.year ? undefined : "Choose a year.",
-      };
-    case "gpa":
-      return { gpa: d.gpa ? undefined : CHOOSE };
-    case "career":
-      return {
-        linkedin: profileError("linkedin", d.linkedin),
-        github: profileError("github", d.github),
-      };
-    case "identity":
-      return {
-        race: d.races.length ? undefined : "Choose at least one answer.",
-      };
-    case "gender":
-      return { gender: d.gender ? undefined : CHOOSE };
-    case "first-gen":
-      return { "first-generation": d.firstGeneration ? undefined : CHOOSE };
-    case "low-income":
-      return { "low-income": d.lowIncome ? undefined : CHOOSE };
-    case "goals":
-    case "hobbies":
-      return {};
-  }
-}
-
-export const passes = (slug: Slug, d: Draft) =>
-  Object.values(checksFor(slug, d)).every((message) => !message);
-
-const typedName = (site: ProfileSite, value: string) => {
-  const name = profileName(site, value);
-  return name === value.trim() ? value.trimStart() : name;
-};
-
-export const failureText = (failure: unknown) =>
-  failure instanceof ConvexError
-    ? String(failure.data)
-    : "We couldn't save that. Check your connection and try again.";
-
-export function useSave() {
-  const saveName = useMutation(api.members.saveName);
-  const saveContact = useMutation(api.members.saveContact);
-  const saveStudies = useMutation(api.members.saveStudies);
-  const saveMaterials = useMutation(api.members.saveMaterials);
-  const saveDemographics = useMutation(api.members.saveDemographics);
-  const saveInterests = useMutation(api.members.saveInterests);
-  const skip = useMutation(api.members.skip);
-
-  return async (group: Group, d: Draft, me: Profile) => {
-    switch (group) {
-      case "name":
-        await saveName({
-          firstName: d.firstName,
-          lastName: d.lastName,
-          pronouns: d.choice === SELF_DESCRIBE ? d.writeIn.trim() : d.choice,
-        });
-        return;
-      case "contact":
-        await saveContact({ personalEmail: d.personalEmail, phone: d.phone });
-        return;
-      case "studies":
-        if (!d.standing || !d.season || !d.gpa) return;
-        await saveStudies({
-          classStanding: d.standing,
-          major: d.major,
-          minor: d.minor.trim() || undefined,
-          graduationSeason: d.season,
-          graduationYear: Number(d.year),
-          gpa: d.gpa,
-        });
-        return;
-      case "materials":
-        if (!d.linkedin.trim() && !d.github.trim() && !me.resume && !me.materials) {
-          await skip({ step: 4 });
-        } else {
-          await saveMaterials({
-            linkedin: d.linkedin.trim() || undefined,
-            github: d.github.trim() || undefined,
-            resumeBook: d.resumeBook && Boolean(me.resume),
-          });
-        }
-        return;
-      case "background":
-        if (!d.gender || !d.firstGeneration || !d.lowIncome) return;
-        await saveDemographics({
-          raceEthnicity: d.races,
-          gender: d.gender,
-          firstGeneration: d.firstGeneration,
-          lowIncome: d.lowIncome,
-        });
-        return;
-      case "interests":
-        if (d.lookingFor.length === 0 && d.hobbies.length === 0 && !me.interests) {
-          await skip({ step: 5 });
-        } else await saveInterests({ lookingFor: d.lookingFor, hobbies: d.hobbies });
-    }
-  };
-}
 
 const scroller = (el: Element) => {
   for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
@@ -306,7 +122,6 @@ const messageFor = (k: string) => {
   return id ? document.getElementById(id) : null;
 };
 
-// The visible part of the page: above Continue and its fade where it is pinned to the bottom.
 function viewOf(el: Element) {
   const s = scroller(el);
   if (s) return { s, top: s.getBoundingClientRect().top, bottom: s.getBoundingClientRect().bottom };
@@ -319,18 +134,15 @@ function viewOf(el: Element) {
   return { s, top: 0, bottom };
 }
 
-// After Continue the page moves only as far as it takes to show the first problem down to its message, the message first.
 function reveal(msg: HTMLElement, block: Element) {
   const { s, top, bottom } = viewOf(msg);
-  const hi = block.getBoundingClientRect().top - top - 16;
-  const lo = msg.getBoundingClientRect().bottom - bottom + 16;
-  const d = lo <= hi ? Math.min(Math.max(0, lo), hi) : lo;
-  if (Math.abs(d) < 1) return;
-  (s ?? window).scrollBy({ top: d, behavior: still() ? "instant" : "smooth" });
+  const room = block.getBoundingClientRect().top - top - 16;
+  const need = msg.getBoundingClientRect().bottom - bottom + 16;
+  const by = need <= room ? Math.min(Math.max(0, need), room) : need;
+  if (Math.abs(by) < 1) return;
+  (s ?? window).scrollBy({ top: by, behavior: still() ? "instant" : "smooth" });
 }
 
-// The You page's rule: a problem shows once its field is left or Continue is pressed, and leaves once it's fixed.
-// Keys are element ids, so Continue can move focus to the first problem.
 export function useChecks(errors: Record<string, string | undefined>) {
   const [shown, setShown] = useState<ReadonlySet<string>>(new Set());
   const held = useRef<{ el: Element | null; y: number; k: string } | null>(null);
@@ -341,8 +153,7 @@ export function useChecks(errors: Record<string, string | undefined>) {
     document.addEventListener("pointerdown", down, true);
     return () => document.removeEventListener("pointerdown", down, true);
   }, []);
-  // A message opening above where the member went next moves the page instead, short of lifting the message off the top;
-  // one opening below the visible part of the page is brought up, as far as keeps where the member went in view.
+  // A new message keeps whatever the member moved to under the pointer, and shows itself only as far as that allows.
   useLayoutEffect(() => {
     const h = held.current;
     held.current = null;
@@ -416,38 +227,7 @@ export function useChecks(errors: Record<string, string | undefined>) {
 
 export type Checks = ReturnType<typeof useChecks>;
 
-export const RESUME_LIMIT = `${RESUME_MAX_BYTES / 1024 / 1024}MB`;
-
-/** Sends the resume straight to the member's own row and returns an error to show, if any. */
-export async function uploadResume(file: File): Promise<string | null> {
-  if (file.type !== RESUME_CONTENT_TYPE) return "Upload a PDF.";
-  if (file.size > RESUME_MAX_BYTES) return `Keep the file under ${RESUME_LIMIT}.`;
-  try {
-    const { data } = await authClient.convex.token({ fetchOptions: { throw: false } });
-    if (!data?.token) return "Sign in again to upload.";
-
-    const response = await fetch(
-      `${env.VITE_CONVEX_SITE_URL}/resume?name=${encodeURIComponent(file.name)}`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${data.token}`, "Content-Type": RESUME_CONTENT_TYPE },
-        body: file,
-      },
-    );
-    if (response.ok) return null;
-    return (await response.text()) || "Upload failed. Try again.";
-  } catch {
-    return "Upload failed. Try again.";
-  }
-}
-
-const PRONOUN_OPTIONS = PRONOUNS.map((value) => ({ value, label: value }));
-const YEAR_OPTIONS = graduationYearOptions().map((year) => ({
-  value: String(year),
-  label: String(year),
-}));
 const ALL_PROGRAMS = [...new Set(Object.values(DEGREE_PROGRAMS).flat())];
-const PREFER = "prefer_not_to_answer";
 
 function Problem({ id, text }: { id: string; text?: string }) {
   return text ? (
@@ -465,7 +245,6 @@ const textInput = (kind?: "last") => ({
   className: field,
 });
 
-// A field that suggests Georgia Tech programs as you type and still takes a write-in.
 function Program({
   id,
   label,
@@ -522,7 +301,6 @@ function Program({
     }
   }
 
-  // The suggestions float over the page, so opening and closing them never moves Continue.
   return (
     <div className="relative">
       <input
@@ -561,7 +339,7 @@ function Program({
           id={list}
           role="listbox"
           aria-label={label}
-          className="absolute inset-x-0 top-full z-40 mt-3 rounded-3xl bg-navy p-1 shadow-[0_10px_30px] shadow-navy/35"
+          className="absolute inset-x-0 top-full z-40 mt-3 float-panel"
         >
           {matches.map((program, i) => {
             const at = program.toLowerCase().indexOf(typed);
@@ -573,7 +351,7 @@ function Program({
                 aria-selected={i === active}
                 onPointerDown={(event) => event.preventDefault()}
                 onClick={() => choose(program)}
-                className={`flex min-h-12 cursor-pointer items-center rounded-[20px] px-4 py-2 type-heading text-lg leading-snug text-diploma/86 roomy:px-7 ${
+                className={`flex min-h-12 cursor-pointer items-center rounded-[20px] px-4 py-2 type-display text-lg leading-snug text-diploma/86 roomy:px-7 ${
                   i === active ? "bg-diploma/13" : "hover:bg-diploma/8"
                 }`}
               >
@@ -630,14 +408,7 @@ function Major({ d, set, check }: BodyProps) {
                 }}
                 className="absolute top-1/2 right-2 grid size-11 -translate-y-1/2 cursor-pointer place-items-center rounded-full text-diploma/70 transition-[background-color,color] hover:bg-diploma/13 hover:text-diploma focus-visible:outline-offset-0 roomy:right-3 roomy:size-12"
               >
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden className="size-5.5">
-                  <path
-                    d="M7 7l10 10M17 7L7 17"
-                    stroke="currentColor"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                  />
-                </svg>
+                <i aria-hidden className="ic x size-5.5" />
               </button>
             }
           />
@@ -650,7 +421,7 @@ function Major({ d, set, check }: BodyProps) {
             setSecond(true);
             requestAnimationFrame(() => document.getElementById("minor")?.focus());
           }}
-          className="mt-4 inline-flex min-h-12 cursor-pointer items-center rounded-full px-5 text-left type-heading text-base font-semibold text-diploma/86 transition-[background-color,color] hover:bg-diploma/13 hover:text-diploma roomy:px-8 roomy:text-lg"
+          className="mt-4 inline-flex min-h-12 cursor-pointer items-center rounded-full px-5 text-left type-display text-base font-semibold text-diploma/86 transition-[background-color,color] hover:bg-diploma/13 hover:text-diploma roomy:px-8 roomy:text-lg"
         >
           + Add a second major or minor
         </button>
@@ -659,18 +430,19 @@ function Major({ d, set, check }: BodyProps) {
   );
 }
 
-function Career({ me, d, set, check, setUploading }: BodyProps) {
+function Career({ me, d, set, check, onUpload }: BodyProps) {
   const [busy, setBusy] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [over, setOver] = useState(false);
   const was = useRef(me.resume);
+  const settle = useRef<(ok: boolean) => void>(() => {});
 
   // The new name shows once the member's row has it, so the field never flashes back to the old one.
   useEffect(() => {
     if (!busy || me.resume === was.current) return;
     setBusy(null);
-    setUploading(false);
-  }, [busy, me.resume, setUploading]);
+    settle.current(true);
+  }, [busy, me.resume]);
 
   // A file dropped beside the field rather than on it would open in the tab and lose the answers.
   useEffect(() => {
@@ -687,15 +459,22 @@ function Career({ me, d, set, check, setUploading }: BodyProps) {
     if (!file || busy) return;
     was.current = me.resume;
     setBusy(file.name);
-    setUploading(true);
     setProblem(null);
-    const failure = await uploadResume(file);
+    onUpload(
+      new Promise((resolve) => {
+        settle.current = resolve;
+      }),
+    );
+    const result = await uploadResume(file);
     // The same file again leaves the member's row as it was, so nothing else would end the upload.
-    const same = was.current?.name === resumeName(file.name) && was.current?.size === file.size;
-    if (!failure && !same) return;
-    setProblem(failure);
+    const same =
+      result.ok &&
+      was.current?.name === result.resume.name &&
+      was.current?.size === result.resume.size;
+    if (result.ok && !same) return;
+    setProblem(result.ok ? null : result.error);
     setBusy(null);
-    setUploading(false, Boolean(failure));
+    settle.current(result.ok);
   }
 
   const book = Boolean(me.resume) && d.resumeBook;
@@ -727,7 +506,7 @@ function Career({ me, d, set, check, setUploading }: BodyProps) {
             setOver(false);
             void attach(event.dataTransfer.files[0]);
           }}
-          className={`group flex cursor-pointer items-center gap-3 rounded-full bg-navy/45 type-heading tracking-[-0.01em] has-focus-visible:outline-2 has-focus-visible:outline-offset-4 has-focus-visible:outline-burdell has-aria-invalid:outline-2 has-aria-invalid:outline-offset-4 has-aria-invalid:outline-azalea has-aria-disabled:cursor-wait ${over ? "outline-2 outline-offset-4 outline-burdell" : ""} ${field}`}
+          className={`group flex cursor-pointer items-center gap-3 rounded-full bg-navy/45 type-display tracking-[-0.01em] has-focus-visible:outline-2 has-focus-visible:outline-offset-4 has-focus-visible:outline-burdell has-aria-invalid:outline-2 has-aria-invalid:outline-offset-4 has-aria-invalid:outline-azalea has-aria-disabled:cursor-wait ${over ? "outline-2 outline-offset-4 outline-burdell" : ""} ${field}`}
         >
           <input
             id="resume"
@@ -799,7 +578,7 @@ export type BodyProps = {
   set: (patch: Partial<Draft>) => void;
   check: Checks;
   titleId: string;
-  setUploading: (on: boolean, failed?: boolean) => void;
+  onUpload: (settled: Promise<boolean>) => void;
   onPick: (settled: boolean, patch?: Partial<Draft>) => void;
 };
 
@@ -837,7 +616,7 @@ export function Body({ slug, ...props }: BodyProps & { slug: Slug }) {
         <div data-block>
           <div className="grid gap-4 roomy:grid-cols-2">
             <input
-              {...check.field("first-name")}
+              {...check.field("firstName")}
               {...textInput()}
               aria-label="First name"
               autoComplete="given-name"
@@ -846,7 +625,7 @@ export function Body({ slug, ...props }: BodyProps & { slug: Slug }) {
               onChange={(event) => set({ firstName: event.target.value })}
             />
             <input
-              {...check.field("last-name", "first-name")}
+              {...check.field("lastName", "firstName")}
               {...textInput("last")}
               aria-label="Last name"
               autoComplete="family-name"
@@ -856,11 +635,11 @@ export function Body({ slug, ...props }: BodyProps & { slug: Slug }) {
             />
           </div>
           <Problem
-            id="first-name-error"
+            id="firstName-error"
             text={
-              check.error("first-name") && check.error("last-name")
+              check.error("firstName") && check.error("lastName")
                 ? "Enter your first and last name."
-                : (check.error("first-name") ?? check.error("last-name"))
+                : (check.error("firstName") ?? check.error("lastName"))
             }
           />
         </div>
@@ -870,9 +649,9 @@ export function Body({ slug, ...props }: BodyProps & { slug: Slug }) {
         <>
           <div data-block>
             <Rows
-              id="pronouns"
+              id="choice"
               labelledBy={titleId}
-              describedBy={check.describedBy("pronouns")}
+              describedBy={check.describedBy("choice")}
               options={PRONOUN_OPTIONS}
               value={d.choice}
               quiet={SELF_DESCRIBE}
@@ -881,15 +660,15 @@ export function Body({ slug, ...props }: BodyProps & { slug: Slug }) {
                 if (v !== SELF_DESCRIBE) return onPick(settled, { choice: v });
                 onPick(false);
                 if (settled)
-                  requestAnimationFrame(() => document.getElementById("write-in")?.focus());
+                  requestAnimationFrame(() => document.getElementById("writeIn")?.focus());
               }}
             />
-            <Problem id="pronouns-error" text={check.error("pronouns")} />
+            <Problem id="choice-error" text={check.error("choice")} />
           </div>
           {d.choice === SELF_DESCRIBE ? (
             <div data-block className="mt-4">
               <input
-                {...check.field("write-in")}
+                {...check.field("writeIn")}
                 {...textInput("last")}
                 autoCapitalize="none"
                 aria-label="Your pronouns"
@@ -897,7 +676,7 @@ export function Body({ slug, ...props }: BodyProps & { slug: Slug }) {
                 value={d.writeIn}
                 onChange={(event) => set({ writeIn: event.target.value })}
               />
-              <Problem id="write-in-error" text={check.error("write-in")} />
+              <Problem id="writeIn-error" text={check.error("writeIn")} />
             </div>
           ) : null}
         </>
@@ -907,7 +686,7 @@ export function Body({ slug, ...props }: BodyProps & { slug: Slug }) {
         <div data-block>
           <div className="grid grid-cols-1 gap-4">
             <input
-              {...check.field("personal-email")}
+              {...check.field("personalEmail")}
               {...textInput()}
               type="email"
               inputMode="email"
@@ -929,7 +708,7 @@ export function Body({ slug, ...props }: BodyProps & { slug: Slug }) {
               onChange={(event) => set({ phone: event.target.value })}
             />
           </div>
-          <Problem id="personal-email-error" text={check.error("personal-email")} />
+          <Problem id="personalEmail-error" text={check.error("personalEmail")} />
           <Problem id="phone-error" text={check.error("phone")} />
         </div>
       );
@@ -955,30 +734,30 @@ export function Body({ slug, ...props }: BodyProps & { slug: Slug }) {
               Term
             </p>
             <Chips
-              id="graduation-season"
+              id="season"
               labelledBy={`${titleId} term-label`}
-              describedBy={check.describedBy("graduation-season")}
+              describedBy={check.describedBy("season")}
               options={SEASONS}
               selected={d.season ? [d.season] : []}
               onToggle={(season) => set({ season })}
               single
             />
-            <Problem id="graduation-season-error" text={check.error("graduation-season")} />
+            <Problem id="season-error" text={check.error("season")} />
           </div>
           <div data-block className="mt-6">
             <p id="year-label" className="mb-2.5 type-label text-diploma/70">
               Year
             </p>
             <Chips
-              id="graduation-year"
+              id="year"
               labelledBy={`${titleId} year-label`}
-              describedBy={check.describedBy("graduation-year")}
+              describedBy={check.describedBy("year")}
               options={YEAR_OPTIONS}
               selected={d.year ? [d.year] : []}
               onToggle={(year) => set({ year })}
               single
             />
-            <Problem id="graduation-year-error" text={check.error("graduation-year")} />
+            <Problem id="year-error" text={check.error("year")} />
           </div>
         </>
       );
@@ -991,31 +770,31 @@ export function Body({ slug, ...props }: BodyProps & { slug: Slug }) {
         <>
           <div data-block>
             <Chips
-              id="race"
+              id="races"
               labelledBy={titleId}
-              describedBy={check.describedBy("race")}
+              describedBy={check.describedBy("races")}
               note="question-note"
               options={RACES}
               selected={d.races}
               onToggle={(value) => set({ races: toggleRace(d.races, value) })}
-              quiet={PREFER}
+              quiet={PREFER_NOT}
             />
-            <Problem id="race-error" text={check.error("race")} />
+            <Problem id="races-error" text={check.error("races")} />
           </div>
         </>
       );
     case "gender":
-      return rows("gender", GENDERS, d.gender, (gender) => ({ gender }), PREFER);
+      return rows("gender", GENDERS, d.gender, (gender) => ({ gender }), PREFER_NOT);
     case "first-gen":
       return rows(
-        "first-generation",
+        "firstGeneration",
         YES_NO,
         d.firstGeneration,
         (firstGeneration) => ({ firstGeneration }),
-        PREFER,
+        PREFER_NOT,
       );
     case "low-income":
-      return rows("low-income", YES_NO, d.lowIncome, (lowIncome) => ({ lowIncome }), PREFER);
+      return rows("lowIncome", YES_NO, d.lowIncome, (lowIncome) => ({ lowIncome }), PREFER_NOT);
     case "goals":
       return (
         <Chips

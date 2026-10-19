@@ -2,6 +2,8 @@ import alea from "alea";
 import { curveBasisClosed, lineRadial } from "d3-shape";
 import { useEffect, useRef } from "react";
 
+import type { Profile } from "@/lib/member";
+
 const W = 440;
 const H = 277;
 const TAU = Math.PI * 2;
@@ -26,8 +28,7 @@ function settings(no: number) {
   };
 }
 
-// Guilloché rings, one path each (d3's closed B-spline), with pieces wholly off the card dropped. Capping a lobe flank's
-// angle keeps the walls near the centre from catching the light in step and drawing spokes.
+// Capping each lobe's slope stops the inner rings catching the light together and drawing spokes.
 function relief(s: ReturnType<typeof settings>) {
   const count = 33,
     inner = 10,
@@ -94,8 +95,7 @@ function relief(s: ReturnType<typeof settings>) {
   return out;
 }
 
-// One key light from the top left. The ground lift, the lit walls, the groove floors and the glitter all read it,
-// so the light on the surface and the light in the grooves are the same light.
+// Every gradient and RELIEF.az assume this one light, so move them together.
 const KEY = { x: 26, y: 0, rx: 506, ry: 318 };
 const REACH = { ...KEY, ry: 250 };
 const SPARKLE: Stops = [
@@ -138,8 +138,6 @@ const tint = (c: string, k: number, at: number) => {
 const speck = (id: string, seed: number, c: string, k: number, at: number) =>
   `<filter id="${id}" filterUnits="userSpaceOnUse" x="0" y="0" width="${W}" height="${H}" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="${NOISE}" numOctaves="3" seed="${seed}"/><feColorMatrix values="${tint(c, k, at)}"/></filter>`;
 
-// The rings are cut into the card: their stroke alpha is a height map lit by one distant light from the key's direction,
-// and the last few rings grow shallower so the pattern ends without an outline.
 function art(no: number, C: Palette) {
   const id = `cf${no}`;
   const s = settings(no);
@@ -175,8 +173,6 @@ ${speck(`${id}gu`, no % 997, C.cream, 0.16, 0.5)}${speck(`${id}gd`, no % 997, C.
 </svg>`;
 }
 
-// The type is pressed into the card: the ink shades just inside each glyph's top-left edge and a lip catches the
-// light just outside its bottom-right edge, with a shallower press for small type so thin strokes stay clean.
 const press = (id: string, [dx, dy, blur, shade]: number[], lip: number, C: Palette) =>
   `<filter id="${id}" x="-5%" y="-20%" width="110%" height="140%" color-interpolation-filters="sRGB">
 <feComponentTransfer in="SourceAlpha" result="inv"><feFuncA type="table" tableValues="1 0 0"/></feComponentTransfer>
@@ -188,15 +184,15 @@ const press = (id: string, [dx, dy, blur, shade]: number[], lip: number, C: Pale
 
 const esc = (v: string) => v.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
-function card(no: number, name: string, since: string, C: Palette) {
+const nameHtml = (name: string) =>
+  esc(name).replace(/\S+-\S+/g, (w) => `<span class="cf-k">${w}</span>`);
+
+function card(no: number, C: Palette) {
   const filters = `<svg width="0" height="0" style="position:absolute" aria-hidden="true">${press("cf-press", [0.6, 0.8, 0.45, 0.55], 0.16, C)}${press("cf-press-sm", [0.35, 0.45, 0.3, 0.4], 0.12, C)}</svg>`;
-  const nm = `<div class="cf-n">${esc(name).replace(/\S+-\S+/g, (w) => `<span class="cf-k">${w}</span>`)}</div>`;
-  const face = `<div class="cf-f"><div class="cf-w">ColorStack at <span class="cf-gt" role="img" aria-label="Georgia Tech"></span></div><div class="cf-b">${nm}<div class="cf-s"><span class="cf-l">Member since</span> <span class="cf-v">${esc(since)}</span></div></div></div>`;
+  const face = `<div class="cf-f"><div class="cf-w">ColorStack at <span class="cf-gt" role="img" aria-label="Georgia Tech"></span></div><div class="cf-b"><div class="cf-n"></div><div class="cf-s"><span class="cf-l">Member since</span> <span class="cf-v"></span></div></div></div>`;
   return `${filters}<div class="cf-wrap"><div class="cf-tilt"><i class="cf-shade"></i><div class="cf">${art(no, C)}<i class="cf-sheen"></i>${face}<i class="cf-edge"></i></div></div></div>`;
 }
 
-// Hover tilt: the card leans up to 5 degrees away under the mouse, a highlight follows and the shadow deepens. One
-// critically damped spring per axis settles in about 0.4s; touch and reduced motion keep the card still.
 function tilt(wrap: HTMLElement) {
   if (
     !matchMedia("(hover: hover) and (pointer: fine)").matches ||
@@ -205,11 +201,14 @@ function tilt(wrap: HTMLElement) {
     return () => {};
   }
   const K = 225;
-  const D = 30;
+  const D = 2 * Math.sqrt(K);
   const s = { tx: [0, 0, 0], ty: [0, 0, 0], h: [0, 0, 0] };
   const card = wrap.querySelector<HTMLElement>(".cf-tilt")!;
   const shade = wrap.querySelector<HTMLElement>(".cf-shade")!;
   const sheen = wrap.querySelector<HTMLElement>(".cf-sheen")!;
+  card.style.willChange = "transform";
+  shade.style.willChange = "opacity";
+  sheen.style.willChange = "transform, opacity";
   let raf = 0;
   let last = 0;
   // Only transforms and opacity change, written straight onto their elements, so the ring art is never redrawn.
@@ -263,22 +262,35 @@ function seedOf(text: string) {
   return ((h >>> 0) % 9999) + 1;
 }
 
-export function MemberCard({ seed, name, since }: { seed: string; name: string; since: string }) {
+export function MemberCard({ me }: { me: Pick<Profile, "gtEmail" | "name" | "joinedAt"> }) {
   const host = useRef<HTMLDivElement>(null);
+  const no = seedOf(me.gtEmail);
+  const name = `${me.name?.firstName ?? ""} ${me.name?.lastName ?? ""}`.trim();
+  const since = me.joinedAt
+    ? new Date(me.joinedAt).toLocaleDateString("en-US", { month: "long", year: "numeric" })
+    : "";
 
+  // The art depends only on the seed, so a name or date change rewrites the face's text and nothing else.
   useEffect(() => {
     const el = host.current;
     if (!el) return;
     const style = getComputedStyle(el);
     const token = (name: string) => style.getPropertyValue(name).trim();
-    el.innerHTML = card(seedOf(seed), name, since, {
+    el.innerHTML = card(no, {
       navy: token("--cf-navy"),
       lift: token("--cf-lift"),
       cream: token("--cf-cream"),
       burdell: token("--cf-burdell"),
     });
     return tilt(el.querySelector<HTMLElement>(".cf-wrap")!);
-  }, [seed, name, since]);
+  }, [no]);
+
+  useEffect(() => {
+    const el = host.current;
+    if (!el) return;
+    el.querySelector(".cf-n")!.innerHTML = nameHtml(name);
+    el.querySelector(".cf-v")!.textContent = since;
+  }, [no, name, since]);
 
   return <div ref={host} className="cf-host" role="group" aria-label="Member card" />;
 }

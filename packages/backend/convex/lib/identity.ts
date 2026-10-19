@@ -14,7 +14,6 @@ export function isEmail(value: string): boolean {
   return EMAIL.test(value.trim());
 }
 
-// A personal address is how the club reaches a member after Georgia Tech, so it can't be one.
 export function personalEmailError(value: string): string | undefined {
   if (!isEmail(value)) return "Enter a valid email address.";
   if (isGeorgiaTechEmail(value)) return "Use a personal email, not a Georgia Tech one.";
@@ -47,7 +46,6 @@ const PROFILES = {
 
 export type ProfileSite = keyof typeof PROFILES;
 
-// The field shows the site's address before the name, so a pasted link keeps only the name.
 export function profileName(site: ProfileSite, value: string): string {
   const trimmed = value.trim();
   const name = PROFILES[site].link.exec(trimmed)?.[1];
