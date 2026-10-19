@@ -886,7 +886,7 @@ function Editor({
   const lead = LEAD[ed.editor];
   return (
     <form
-      className={ed.busy ? "ed busy" : "ed"}
+      className={ed.saving ? "ed busy" : "ed"}
       id="ed"
       noValidate
       aria-labelledby={`h-${ed.group}`}

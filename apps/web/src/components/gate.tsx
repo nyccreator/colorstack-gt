@@ -11,7 +11,7 @@ import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "rea
 import { z } from "zod";
 
 import { authClient } from "@/lib/auth-client";
-import { useSlow } from "@/lib/motion";
+import { useSlowHold } from "@/lib/motion";
 import { landing, signedIn } from "@/lib/session";
 
 import { Bar } from "./frame";
@@ -152,7 +152,7 @@ function EmailStep({
   const [invalid, setInvalid] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const slow = useSlow(pending);
+  const [slow, hold] = useSlowHold(pending);
 
   // Only a fine pointer focuses the field on arrival, so a phone's keyboard doesn't open unasked.
   useEffect(() => {
@@ -170,6 +170,7 @@ function EmailStep({
     setPending(true);
     const address = normalizeEmail(email);
     const failure = await sendCode(address);
+    if (failure) await hold();
     setPending(false);
 
     if (failure) {
@@ -268,8 +269,8 @@ function CodeStep({
   // The server and the client render the same first frame; the tab's own cooldown is read once mounted.
   const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_SECONDS);
   const [error, setError] = useState<string | null>(null);
-  const verifying = useSlow(pending);
-  const resending = useSlow(sending);
+  const [verifying, holdVerify] = useSlowHold(pending);
+  const [resending, holdResend] = useSlowHold(sending);
 
   useEffect(() => {
     // oxlint-disable-next-line react/set-state-in-effect -- The tab's own tries and cooldown are known only once mounted.
@@ -293,6 +294,7 @@ function CodeStep({
       return;
     }
 
+    await holdVerify();
     setPending(false);
     if (!result) {
       setError("We couldn't check that code. Try again.");
@@ -318,6 +320,7 @@ function CodeStep({
     setError(null);
     setSending(true);
     const failure = await sendCode(email);
+    if (failure) await holdResend();
     setSending(false);
     if (failure) {
       setError(failure);
@@ -398,6 +401,7 @@ function CodeStep({
         className="mt-6 roomy:mt-8"
       >
         <div className="group relative">
+          {/* iOS paints its own selection over transparent text, but not over a field with no opacity. */}
           <input
             ref={input}
             autoFocus
@@ -418,7 +422,7 @@ function CodeStep({
               setResent(false);
               if (digits.length === OTP_LENGTH) void verify(digits);
             }}
-            className="absolute inset-x-0 top-1/2 z-10 h-[max(100%,44px)] -translate-y-1/2 cursor-text bg-transparent p-0 text-base text-transparent caret-transparent outline-none selection:bg-transparent"
+            className="absolute inset-x-0 top-1/2 z-10 h-[max(100%,44px)] -translate-y-1/2 cursor-text p-0 text-base opacity-0"
           />
           <div
             aria-hidden

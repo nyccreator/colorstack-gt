@@ -9,7 +9,7 @@ import { FirstName, inlineLink, pin } from "@/components/onboarding/controls";
 import { TASKS } from "@/components/onboarding/options";
 import { MemberCard } from "@/components/you/card";
 import { type Profile, useMember } from "@/lib/member";
-import { slide, still } from "@/lib/motion";
+import { slide } from "@/lib/motion";
 import { requireSession } from "@/lib/session";
 
 export const Route = createFileRoute("/hub")({
@@ -72,11 +72,12 @@ function Engage({ me }: { me: Profile }) {
   const navigate = useNavigate();
   const page = useRef<HTMLElement>(null);
   const title = useRef<HTMLHeadingElement>(null);
+  const leaving = useRef(false);
   const move = (enter: boolean) =>
     Array.from(page.current?.children ?? [], (el) => slide(el, enter));
   useLayoutEffect(() => {
     window.scrollTo(0, 0);
-    if (!still()) move(true);
+    move(true);
     title.current?.focus({ preventScroll: true });
   }, []);
   useEffect(() => {
@@ -90,7 +91,9 @@ function Engage({ me }: { me: Profile }) {
   async function change(event: MouseEvent) {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
-    if (!still()) await Promise.all(move(false).map((a) => a.finished.catch(() => {})));
+    if (leaving.current) return;
+    leaving.current = true;
+    await Promise.all(move(false).map((a) => a.finished.catch(() => {})));
     void navigate({ to: "/onboarding", search: { edit: true } });
   }
   const first = me.name?.firstName ?? "";

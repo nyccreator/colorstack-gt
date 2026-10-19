@@ -37,7 +37,7 @@ import { Message } from "@/components/message";
 import { FirstName, pin, Progress, Tick } from "@/components/onboarding/controls";
 import { Body, QUESTIONS, type Slug, useChecks } from "@/components/onboarding/screens";
 import { type Answers, type Profile, useMember } from "@/lib/member";
-import { BUSY_AFTER, cue, ENTER, slide, still } from "@/lib/motion";
+import { APPEAR, BUSY_AFTER, cue, LABEL_HOLD, slide, still } from "@/lib/motion";
 import { requireSession } from "@/lib/session";
 
 const searchSchema = z.object({
@@ -113,27 +113,21 @@ const flowing = () => {
 };
 
 function rise(el: HTMLElement | null | undefined, dir: number) {
-  if (still() || !el) return null;
+  if (!el) return null;
   const actions = flowing();
   if (actions) slide(actions, true, dir);
-  document
-    .querySelector("[data-pin] [data-skip]:not([inert])")
-    ?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, easing: ENTER });
   return slide(el, true, dir);
 }
 
 function Shell({ pinned, children }: { pinned?: boolean; children?: ReactNode }) {
   return (
-    <div className="min-h-dvh bg-blue-bright px-edge">
-      <Bar signOut />
-      <main
-        className={`mx-auto w-full max-w-gate pt-anchor ${
-          pinned ? "pb-pinned tall:pb-16 short:pb-10" : "pb-10 roomy:pb-16"
-        }`}
-      >
-        {children}
-      </main>
-    </div>
+    <main
+      className={`mx-auto w-full max-w-gate pt-anchor ${
+        pinned ? "pb-pinned tall:pb-16 short:pb-10" : "pb-10 roomy:pb-16"
+      }`}
+    >
+      {children}
+    </main>
   );
 }
 
@@ -143,6 +137,7 @@ function Actions({
   label,
   skip,
   hideSkip,
+  unfold,
   onSkip,
 }: {
   pinned: boolean;
@@ -150,6 +145,7 @@ function Actions({
   label: string;
   skip?: string;
   hideSkip?: boolean;
+  unfold?: boolean;
   onSkip?: () => void;
 }) {
   return (
@@ -160,18 +156,28 @@ function Actions({
     >
       <div className="mx-auto flex w-full max-w-gate items-center tall:flex-col tall:items-stretch">
         {skip ? (
-          <button
-            type="button"
-            data-skip
-            onClick={onSkip}
-            disabled={Boolean(busy)}
-            inert={hideSkip || undefined}
-            className={`btn-quiet flex-none overflow-hidden whitespace-nowrap transition-[max-width,margin,padding,opacity] duration-200 motion-reduce:transition-none tall:order-last tall:mt-3 tall:mr-0 tall:self-center ${
-              hideSkip ? "mr-0 max-w-0 px-0! opacity-0 tall:hidden" : "mr-3 max-w-60"
+          <div
+            className={`grid flex-none transition-[grid-template-columns,margin,opacity] duration-200 ease-move motion-reduce:transition-none tall:order-last tall:mt-3 tall:mr-0 tall:self-center ${
+              hideSkip
+                ? "mr-0 grid-cols-[minmax(0,0fr)] opacity-0 tall:hidden"
+                : "mr-3 grid-cols-[minmax(0,1fr)]"
+            } ${
+              unfold
+                ? "pinned:starting:mr-0 pinned:starting:grid-cols-[minmax(0,0fr)] pinned:starting:opacity-0"
+                : ""
             }`}
           >
-            {skip}
-          </button>
+            <button
+              type="button"
+              data-skip
+              onClick={onSkip}
+              disabled={Boolean(busy)}
+              inert={hideSkip || undefined}
+              className="btn-quiet min-w-0 overflow-hidden px-0! whitespace-nowrap"
+            >
+              <span className="px-link-x">{skip}</span>
+            </button>
+          </div>
         ) : null}
         <button
           type="submit"
@@ -185,6 +191,13 @@ function Actions({
     </div>
   );
 }
+
+const hasAnswer = (slug: Slug, draft: Draft, me: Profile, upload?: unknown) =>
+  slug === "career"
+    ? Boolean(draft.linkedin.trim() || draft.github.trim() || me.resume || upload)
+    : slug === "goals"
+      ? draft.lookingFor.length > 0
+      : slug === "hobbies" && draft.hobbies.length > 0;
 
 const words = (n: number, one: string, many: string) => `${COUNT[n] ?? n} ${n === 1 ? one : many}`;
 
@@ -220,7 +233,11 @@ function Welcome({
   const title = useRef<HTMLHeadingElement>(null);
   const arrival = useRef(enter);
   const [ticked, setTicked] = useState(enter && enter.dir > 0 ? (enter.group ?? null) : null);
-  const untick = useCallback(() => setTicked(null), []);
+  const chevFade = useRef(false);
+  const untick = useCallback(() => {
+    chevFade.current = true;
+    setTicked(null);
+  }, []);
   const open = GROUPS.findIndex((group) => !me.saved[group]);
   useLayoutEffect(() => {
     const { dir, group } = arrival.current ?? { dir: 1 };
@@ -320,7 +337,21 @@ function Welcome({
                       {ticked === group ? (
                         <SavedTick onDone={untick} />
                       ) : (
-                        <i aria-hidden className="ic chev size-4.5 opacity-45" />
+                        <i
+                          aria-hidden
+                          className="ic chev size-4.5 opacity-45"
+                          ref={(chev) => {
+                            if (!chev || !chevFade.current) return;
+                            chevFade.current = false;
+                            chev.animate(
+                              [{ opacity: 0 }, { opacity: getComputedStyle(chev).opacity }],
+                              {
+                                duration: still() ? 120 : 200,
+                                easing: APPEAR,
+                              },
+                            );
+                          }}
+                        />
                       )}
                     </button>
                   ) : (
@@ -392,12 +423,7 @@ function Ask({
   const [beat, setBeat] = useState(0);
   const alive = useRef(true);
   const lastOfGroup = QUESTIONS[at + 1]?.group !== question.group;
-  const chosen =
-    question.slug === "career"
-      ? Boolean(draft.linkedin.trim() || draft.github.trim() || me.resume || upload)
-      : question.slug === "goals"
-        ? draft.lookingFor.length > 0
-        : question.slug === "hobbies" && draft.hobbies.length > 0;
+  const chosen = hasAnswer(question.slug, draft, me, upload);
   const skip = !edit && "skip" in question ? question.skip : undefined;
   const busy = pending && slow ? "Saving…" : undefined;
   const tapSave = useRef<Promise<unknown> | null>(null);
@@ -413,11 +439,17 @@ function Ask({
   async function onward(store: () => Promise<unknown>) {
     setPending(true);
     setProblem(null);
-    const shown = setTimeout(() => setSlow(true), BUSY_AFTER);
+    let shownAt = 0;
+    const shown = setTimeout(() => {
+      shownAt = performance.now();
+      setSlow(true);
+    }, BUSY_AFTER);
     try {
       await store();
     } catch (failure) {
       clearTimeout(shown);
+      if (shownAt)
+        await new Promise((r) => setTimeout(r, shownAt + LABEL_HOLD - performance.now()));
       setSlow(false);
       setPending(false);
       return setProblem(failureText(failure));
@@ -577,6 +609,8 @@ function Ask({
           label={edit && lastOfGroup ? "Save" : at === QUESTIONS.length - 1 ? "Finish" : "Continue"}
           skip={skip}
           hideSkip={chosen}
+          // Only a Skip the question before wasn't showing unfolds, so Continue never jumps wide and back.
+          unfold={!(before && "skip" in before && !hasAnswer(before.slug, draft, me))}
           onSkip={() => void skipThis()}
         />
       </form>
@@ -635,10 +669,21 @@ function screenFor(
   };
 }
 
-function Flow({ me, answers, search }: { me: Profile; answers: Answers | null; search: Search }) {
+function Flow({
+  me,
+  answers,
+  search: url,
+}: {
+  me: Profile;
+  answers: Answers | null;
+  search: Search;
+}) {
   const navigate = useNavigate();
   const router = useRouter();
-  const hop = useLocation({ select: (location) => location.state.hop });
+  const urlHop = useLocation({ select: (location) => location.state.hop });
+  // A leaving screen fades to faint, not to nothing, and stays while the router loads the next one, so no frame between them is blank.
+  const [held, setHeld] = useState<{ search: Search; hop?: Hop } | null>(null);
+  const { search, hop } = held ?? { search: url, hop: urlHop };
   const [draft, setDraft] = useState(() => draftFrom(me, answers));
   const [completeAtLoad] = useState(me.complete);
   const [arrival, setArrival] = useState<Arrival | null>(null);
@@ -654,26 +699,43 @@ function Flow({ me, answers, search }: { me: Profile; answers: Answers | null; s
   const editing = screen.kind === "ask" && screen.editing;
   const backToList = screen.kind === "ask" && screen.backToList;
 
-  async function leave(up: boolean) {
+  async function leave(up: boolean, next?: () => unknown) {
     moving.current = true;
     const el = box.current;
     if (!el) return;
     el.inert = true;
-    if (still()) return;
-    const dir = up ? 1 : -1;
+    const away = still() ? "none" : `translateY(${up ? -12 : 12}px)`;
+    const fade = (x: Element) =>
+      x.animate(
+        [
+          { opacity: 1, transform: "none" },
+          { opacity: 0.1, transform: away },
+        ],
+        {
+          duration: 120,
+          easing: APPEAR,
+          fill: "forwards",
+        },
+      );
     const actions = flowing();
-    if (actions) slide(actions, false, dir);
-    await slide(el, false, dir).finished.catch(() => {});
+    if (actions) fade(actions);
+    const exit = fade(el);
+    setHeld({ search, hop });
+    await exit.ready.catch(() => {});
+    void next?.();
+    await exit.finished.catch(() => {});
+    setHeld(null);
   }
 
   async function go(slug: Slug, open = editing, opened = hop?.opened) {
     if (moving.current) return;
-    await leave(true);
-    await navigate({
-      to: "/onboarding",
-      search: { q: slug, edit: open || undefined, gated: gated || undefined },
-      state: { hop: { from: search.q, opened } },
-    });
+    await leave(true, () =>
+      navigate({
+        to: "/onboarding",
+        search: { q: slug, edit: open || undefined, gated: gated || undefined },
+        state: { hop: { from: search.q, opened } },
+      }),
+    );
   }
 
   // Going back through history when it holds the question before keeps browser Back and Forward in step with the arrow.
@@ -682,39 +744,41 @@ function Flow({ me, answers, search }: { me: Profile; answers: Answers | null; s
     if (moving.current) return;
     if (backToList) return toList(false);
     if (!to) return;
-    await leave(false);
-    if (hop?.from === to) router.history.back();
-    else {
-      await navigate({
-        to: "/onboarding",
-        search: { q: to, edit: editing || undefined, gated: gated || undefined },
-        state: { hop: { opened: hop?.opened } },
-      });
-    }
+    await leave(false, () =>
+      hop?.from === to
+        ? router.history.back()
+        : navigate({
+            to: "/onboarding",
+            search: { q: to, edit: editing || undefined, gated: gated || undefined },
+            state: { hop: { opened: hop?.opened } },
+          }),
+    );
   }
 
   // Back at the list, history is where it was before the group opened, so the browser's Back doesn't reopen it.
   async function toList(up: boolean) {
     if (moving.current) return;
-    await leave(up);
     setArrival({ dir: up ? 1 : -1, group: QUESTIONS[at]?.group });
     const depth = hop?.opened ? historyIndex() - hop.opened.listIndex : 0;
-    if (depth > 0) router.history.go(-depth);
-    else {
-      await navigate({
-        to: "/onboarding",
-        search: { edit: true, gated: gated || undefined },
-        replace: true,
-      });
-    }
+    await leave(up, () =>
+      depth > 0
+        ? router.history.go(-depth)
+        : navigate({
+            to: "/onboarding",
+            search: { edit: true, gated: gated || undefined },
+            replace: true,
+          }),
+    );
   }
 
   async function finish() {
     if (editing) return toList(true);
-    if (!still()) {
-      for (const el of document.querySelectorAll<HTMLElement>("[data-progress], [data-pin]")) {
-        el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 140, fill: "forwards" });
-      }
+    for (const el of document.querySelectorAll<HTMLElement>("[data-progress], [data-pin]")) {
+      el.animate([{ opacity: 1 }, { opacity: 0 }], {
+        duration: 120,
+        easing: APPEAR,
+        fill: "forwards",
+      });
     }
     await leave(true);
     await navigate({ to: "/hub" });
@@ -773,12 +837,17 @@ function Flow({ me, answers, search }: { me: Profile; answers: Answers | null; s
 function Onboarding() {
   const member = useMember();
   const search = Route.useSearch();
-  if (member.status !== "ready") {
-    return (
-      <Shell>
-        <Waiting under={false} />
-      </Shell>
-    );
-  }
-  return <Flow me={member.me} answers={member.answers} search={search} />;
+  // The bar stays outside the keyed screens, so the logo isn't remounted and decoded again on every question.
+  return (
+    <div className="min-h-dvh bg-blue-bright px-edge">
+      <Bar signOut />
+      {member.status === "ready" ? (
+        <Flow me={member.me} answers={member.answers} search={search} />
+      ) : (
+        <Shell>
+          <Waiting under={false} />
+        </Shell>
+      )}
+    </div>
+  );
 }

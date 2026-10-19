@@ -2,7 +2,7 @@ import { type Group, GROUPS } from "@colorstack-gt/backend/convex/lib/groups";
 import { MESSAGES } from "@colorstack-gt/backend/convex/lib/messages";
 import { flushSync } from "react-dom";
 
-import { APPEAR, BUSY_AFTER, cue, MOVE, still } from "@/lib/motion";
+import { APPEAR, BUSY_AFTER, cue, LABEL_HOLD, MOVE, still } from "@/lib/motion";
 
 import { announce as say } from "../frame";
 import {
@@ -86,7 +86,6 @@ type Pin = { sec: HTMLElement; el: Element; by: "center" | "top"; from: number; 
 
 const ZONE_TOP = 16;
 const RING_ROOM = 8;
-const LABEL_HOLD = 400;
 const SCROLL_KEYS = new Set([" ", "PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown"]);
 const VISIBLE = "you-visible";
 const ALL_FIELDS = new Set<string>(Object.values(FIELDS).flat());
@@ -660,16 +659,23 @@ export function createEditing(deps: Deps) {
     return $(E(ed).focus[key] ?? ".f", ed.sec) ?? $(".f", ed.sec)!;
   }
 
-  function closeDom() {
-    const { group, before } = ed!;
+  function closeDom(saved = false) {
+    const { group, before, key } = ed!;
     ed = null;
     showBack(false);
     emit();
     const after = deps.rows(group);
-    return after.filter((r, i) => r.value !== before[i]?.value).map((r) => r.key);
+    const changed = after.filter((r, i) => r.value !== before[i]?.value).map((r) => r.key);
+    return saved && !changed.length ? [key] : changed;
   }
 
-  function open(group: Group, key: string, from?: HTMLElement | null) {
+  function tick(sec: HTMLElement, keys: string[]) {
+    keys.forEach((k, i) =>
+      setTimeout(() => flash($(`[data-row="${k}"] .ok`, sec)), T().close * 0.6 + i * 40),
+    );
+  }
+
+  function open(group: Group, key: string, from?: HTMLElement | null, saved = false) {
     const y0 = scrollY;
     from ??= $(`#g-${group} [data-row="${key}"]`);
     from?.classList.add("press");
@@ -681,7 +687,10 @@ export function createEditing(deps: Deps) {
     const plan = choreograph(
       () => {
         const prev = ed?.sec;
-        if (ed) closeDom();
+        if (prev) {
+          const changed = closeDom(saved);
+          if (saved) tick(prev, changed);
+        }
         target = openDom(group, key);
         const e = ed!;
         const f = form();
@@ -754,7 +763,7 @@ export function createEditing(deps: Deps) {
     let changed: string[] = [];
     choreograph(
       () => {
-        changed = closeDom();
+        changed = closeDom(saved);
         const rowEl = $(`[data-row="${key}"]`, sec)!;
         if (fieldGone) {
           if (keepBelowStill) window.scrollBy(0, sec.getBoundingClientRect().bottom - box.bottom);
@@ -775,10 +784,7 @@ export function createEditing(deps: Deps) {
       },
       { swap: [sec], blank: c },
     );
-    if (saved && !changed.length) changed = [key];
-    changed.forEach((k, i) =>
-      setTimeout(() => flash($(`[data-row="${k}"] .ok`, sec)), T().close * 0.6 + i * 40),
-    );
+    tick(sec, changed);
     $(`[data-row="${key}"]`, sec)?.focus({ preventScroll: true });
   }
 
@@ -788,6 +794,12 @@ export function createEditing(deps: Deps) {
     cue(ok, () => {
       ok.hidden = true;
       ok.getAnimations().forEach((a) => a.cancel());
+      const chev = ok.parentElement?.querySelector<HTMLElement>(":scope > .chev");
+      if (chev)
+        chev.animate([{ opacity: 0 }, { opacity: getComputedStyle(chev).opacity }], {
+          duration: reduce() ? 120 : 200,
+          easing: APPEAR,
+        });
     });
   }
 
@@ -897,8 +909,8 @@ export function createEditing(deps: Deps) {
       return;
     }
     announce(`${TITLES[e.group]} saved.`);
-    close(true);
-    if (next) open(next.group, next.key);
+    if (next) open(next.group, next.key, null, true);
+    else close(true);
   }
 
   function askTop() {
@@ -973,6 +985,17 @@ export function createEditing(deps: Deps) {
     if (focus && ed) $(focus, form())?.focus({ preventScroll: true });
   }
 
+  function paintResMoving(enter: string, focus?: string) {
+    choreograph(
+      () => {
+        emit();
+        return { enter: $$(enter, form()) };
+      },
+      { track: $$(".f, .act", form()) },
+    );
+    if (focus && ed) $(focus, form())?.focus({ preventScroll: true });
+  }
+
   // The resume actions finish only in the editor they started in; a reopened one has its own `res`.
   async function upload(file: File | undefined) {
     const e = ed;
@@ -984,7 +1007,7 @@ export function createEditing(deps: Deps) {
     res.busy = null;
     if (!result.ok) {
       res.error = result.error;
-      paintRes("#replace");
+      paintResMoving('[data-keys="resume"] > .err', "#replace");
       return announce(result.error);
     }
     res.uploaded = result.resume;
@@ -1001,12 +1024,12 @@ export function createEditing(deps: Deps) {
       await deps.removeResume();
       if (ed !== e) return;
       Object.assign(res, { confirm: false, busy: null, error: null, uploaded: null });
-      paintRes("#replace");
+      paintResMoving('[data-keys="resume"] .fa', "#replace");
       announce("Resume removed. You're out of the resume book.");
     } catch (failure) {
       if (ed !== e) return;
       Object.assign(res, { busy: null, error: failureText(failure) });
-      paintRes("[data-act=rm-yes]");
+      paintResMoving('[data-keys="resume"] > .err', "[data-act=rm-yes]");
       announce(failureText(failure));
     }
   }
@@ -1036,7 +1059,7 @@ export function createEditing(deps: Deps) {
         bookLabel: null,
         bookError: "We couldn't change that. Check your connection and try again.",
       });
-      emit();
+      paintResMoving('[data-keys="book"] > .err');
       announce("We couldn't change the resume book. Check your connection and try again.");
       return $(`[data-chips="book"] [data-v="${on ? "in" : "out"}"]`)?.focus({
         preventScroll: true,
@@ -1062,11 +1085,11 @@ export function createEditing(deps: Deps) {
     upload: () => void (res.busy || $<HTMLInputElement>("#resume-file")?.click()),
     rm: () => {
       res.confirm = true;
-      paintRes("[data-act=rm-no]");
+      paintResMoving(".confirm", "[data-act=rm-no]");
     },
     "rm-no": () => {
       res.confirm = false;
-      paintRes("[data-act=rm]");
+      paintResMoving('[data-keys="resume"] .fa', "[data-act=rm]");
     },
     "rm-yes": () => void (res.busy || removeResume()),
   };

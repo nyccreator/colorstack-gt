@@ -20,7 +20,7 @@ type Token = {
   scope: Scope;
 };
 
-type Scope = { tokens: Token[]; next: number; ticked: boolean; timer: number; left: number };
+type Scope = { tokens: Token[]; next: number; ticked: boolean; timer: number };
 
 export type Tokens = {
   hand: (scene: HTMLElement, t: number) => void;
@@ -36,21 +36,92 @@ const number = (value: string, fallback: number) => {
 const tilt = (el: HTMLElement) =>
   Math.sign(number(getComputedStyle(el).getPropertyValue("--r"), 0));
 
+// An iPhone gives an icon a layer of its own when an animation starts on it and draws that layer frames late, so a
+// swap blanked the pill; icons are moved from script instead and paint with their scene in the same frame.
+const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
+const STEPS = 120;
+// Each easing is sampled once by the browser and read from the table after, so a frame never touches an Animation.
+const curve = (easing: string) => {
+  let table: number[] | undefined;
+  return (x: number) => {
+    if (!table) {
+      const clock = new Animation(
+        new KeyframeEffect(null, null, { duration: 1, easing, fill: "both" }),
+      );
+      table = Array.from({ length: STEPS + 1 }, (_, i) => {
+        clock.currentTime = i / STEPS;
+        return clock.effect?.getComputedTiming().progress ?? i / STEPS;
+      });
+      clock.cancel();
+    }
+    const at = Math.min(1, Math.max(0, x)) * STEPS;
+    const i = Math.min(STEPS - 1, Math.floor(at));
+    return lerp(table[i]!, table[i + 1]!, at - i);
+  };
+};
+const pop = curve(POP);
+const settle = curve(SETTLE);
+const out = curve(OUT);
+const shrink = curve(SHRINK);
+
+const frames = new WeakMap<HTMLElement, number>();
+
+function halt(el: HTMLElement) {
+  cancelAnimationFrame(frames.get(el) ?? 0);
+  frames.delete(el);
+}
+
+function play(el: HTMLElement, ms: number, draw: (at: number) => void, done: () => void) {
+  halt(el);
+  const t0 = performance.now();
+  const tick = () => {
+    const at = performance.now() - t0;
+    draw(Math.min(at, ms));
+    if (at < ms) frames.set(el, requestAnimationFrame(tick));
+    else {
+      frames.delete(el);
+      done();
+    }
+  };
+  tick();
+}
+
+function pose(el: HTMLElement, rotate: number, scale: number, opacity: number) {
+  el.style.rotate = `${rotate}deg`;
+  el.style.scale = String(scale);
+  el.style.opacity = String(opacity);
+}
+
+function rest(el: HTMLElement) {
+  el.style.removeProperty("rotate");
+  el.style.removeProperty("scale");
+  el.style.removeProperty("opacity");
+}
+
 function enter(el: HTMLElement) {
   const s = tilt(el);
-  el.animate(
-    [
-      { rotate: `${-16 * s}deg`, scale: 0.4, easing: POP },
-      { rotate: `${5 * s}deg`, scale: 1.2, offset: 2 / 3, easing: SETTLE },
-      { rotate: "0deg", scale: 1 },
-    ],
-    { duration: 600 },
+  halt(el);
+  play(
+    el,
+    600,
+    (at) => {
+      const t = at / 600;
+      const fade = out(Math.min(1, at / 180));
+      if (t < 2 / 3) {
+        const k = pop(t * 1.5);
+        pose(el, lerp(-16 * s, 5 * s, k), lerp(0.4, 1.2, k), fade);
+      } else {
+        const k = settle((t - 2 / 3) * 3);
+        pose(el, lerp(5 * s, 0, k), lerp(1.2, 1, k), fade);
+      }
+    },
+    () => rest(el),
   );
-  el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: OUT });
 }
 
 function retire(el: HTMLElement) {
-  for (const animation of el.getAnimations()) animation.cancel();
+  halt(el);
+  rest(el);
   if (el.dataset.clone) el.remove();
   else el.style.visibility = "hidden";
 }
@@ -61,30 +132,36 @@ function leave(el: HTMLElement) {
   const scale = number(style.getPropertyValue("scale"), 1);
   const rotate = number(style.getPropertyValue("rotate"), 0);
   const opacity = number(style.opacity, 1);
-  for (const animation of el.getAnimations()) animation.cancel();
-  el.animate([{ scale }, { scale: 0.5 }], {
-    duration: SHRINK_MS,
-    easing: SHRINK,
-    fill: "forwards",
-  });
-  el.animate([{ rotate: `${rotate}deg` }, { rotate: `${5 * s}deg` }], {
-    duration: 200,
-    easing: OUT,
-    fill: "forwards",
-  });
-  el.animate([{ opacity }, { opacity: 0 }], { duration: 200, easing: OUT, fill: "forwards" });
-  setTimeout(() => retire(el), SHRINK_MS);
+  halt(el);
+  play(
+    el,
+    SHRINK_MS,
+    (at) => {
+      const k = out(Math.min(1, at / 200));
+      pose(
+        el,
+        lerp(rotate, 5 * s, k),
+        lerp(scale, 0.5, shrink(at / SHRINK_MS)),
+        lerp(opacity, 0, k),
+      );
+    },
+    () => retire(el),
+  );
 }
 
 export function startTokens(root: HTMLElement): Tokens {
   const reduce = matchMedia("(prefers-reduced-motion: reduce)");
   const scopes = new Map<Element, Scope>();
   const tokens = new Map<HTMLElement, Token>();
+  const waits = new WeakMap<HTMLElement, number>();
 
   const seen = new IntersectionObserver((entries) => {
     for (const entry of entries) {
       const token = tokens.get(entry.target as HTMLElement);
-      if (token) token.visible = entry.isIntersecting;
+      if (!token) continue;
+      const back = entry.isIntersecting && !token.visible;
+      token.visible = entry.isIntersecting;
+      if (back) arm(token.scope);
     }
   });
 
@@ -98,18 +175,30 @@ export function startTokens(root: HTMLElement): Tokens {
     token.cur = el;
     token.idx = idx;
     if (reduce.matches) {
-      if (old) retire(old);
+      if (old && old !== el) {
+        play(
+          old,
+          120,
+          (at) => (old.style.opacity = String(1 - out(at / 120))),
+          () => retire(old),
+        );
+      }
+      play(
+        el,
+        120,
+        (at) => (el.style.opacity = String(out(at / 120))),
+        () => rest(el),
+      );
       return;
     }
     if (old) leave(old);
     enter(el);
   };
 
-  // A scope cycles by itself for one pass back to its first icons, and a tap ends that pass.
   const arm = (scope: Scope) => {
     clearTimeout(scope.timer);
     scope.timer = 0;
-    if (reduce.matches || document.hidden || !scope.tokens.length || scope.left <= 0) return;
+    if (reduce.matches || document.hidden || !scope.tokens.length) return;
     scope.timer = window.setTimeout(
       () => {
         const count = scope.tokens.length;
@@ -118,7 +207,6 @@ export function startTokens(root: HTMLElement): Tokens {
           if (!token || !token.visible || token.bare) continue;
           scope.next = (scope.next + k + 1) % count;
           scope.ticked = true;
-          scope.left -= 1;
           show(token, (token.idx + 1) % token.templates.length);
           break;
         }
@@ -135,7 +223,7 @@ export function startTokens(root: HTMLElement): Tokens {
     const host = el.closest("[data-scene]") ?? root;
     let scope = scopes.get(host);
     if (!scope) {
-      scope = { tokens: [], next: 0, ticked: false, timer: 0, left: 0 };
+      scope = { tokens: [], next: 0, ticked: false, timer: 0 };
       scopes.set(host, scope);
     }
     const cur = pics.find((pic) => pic.classList.contains("on")) ?? pics[0] ?? null;
@@ -158,7 +246,6 @@ export function startTokens(root: HTMLElement): Tokens {
     tokens.set(el, token);
     if (token.cycles) {
       scope.tokens.push(token);
-      scope.left += token.templates.length;
       seen.observe(el);
     }
   }
@@ -174,7 +261,8 @@ export function startTokens(root: HTMLElement): Tokens {
     }
     show(token, (token.idx + 1) % token.templates.length);
     const scope = token.scope;
-    scope.left = 0;
+    scope.next = (scope.tokens.indexOf(token) + 1) % scope.tokens.length;
+    scope.ticked = true;
     arm(scope);
   };
 
@@ -219,6 +307,7 @@ export function startTokens(root: HTMLElement): Tokens {
     el.classList.add("on");
     token.art.appendChild(el);
     token.cur = el;
+    if (token.cycles) arm(token.scope);
     if (reduce.matches) return;
     el.style.visibility = "hidden";
     setTimeout(() => {
@@ -247,16 +336,20 @@ export function startTokens(root: HTMLElement): Tokens {
         if (t <= 0.05) {
           sticker.dataset.shown = "";
           sticker.style.visibility = "hidden";
+          clearTimeout(waits.get(sticker));
           continue;
         }
         if (sticker.dataset.shown) continue;
         const box = sticker.getBoundingClientRect();
         if (!box.height || box.bottom > bottom - 2) continue;
         sticker.dataset.shown = "1";
-        setTimeout(() => {
-          sticker.style.visibility = "";
-          if (!reduce.matches) enter(sticker);
-        }, order++ * 80);
+        waits.set(
+          sticker,
+          window.setTimeout(() => {
+            sticker.style.visibility = "";
+            if (!reduce.matches) enter(sticker);
+          }, order++ * 80),
+        );
       }
     },
     settle() {

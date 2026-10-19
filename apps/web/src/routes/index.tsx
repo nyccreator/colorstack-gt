@@ -25,6 +25,7 @@ const COPIES = 8;
 const TILTS = ["-6deg", "5deg", "-4deg"];
 
 const sticker = (name: string) => `url(/assets/art/stickers/${name}.svg)`;
+const BUZZ_EDGE = sticker("buzz-edge");
 
 const FIGURES = [
   ["110+", "active members"],
@@ -131,6 +132,7 @@ const PLAN = [
 ] as const;
 
 const LIFT = 22;
+const SETTLE_PX = 8;
 const SETTLES = Math.max(...PLAN.map((part) => ("split" in part ? part.split : part.enter))) + 1;
 
 const clamp01 = (value: number) => (value < 0 ? 0 : value > 1 ? 1 : value);
@@ -187,6 +189,7 @@ function useStage(root: RefObject<HTMLDivElement | null>) {
       (parseFloat(getComputedStyle(shell).getPropertyValue("--stages")) || 1);
     const parts = [...landing.querySelectorAll<HTMLElement>("[data-tone]")];
     const still = matchMedia("(prefers-reduced-motion: reduce)");
+    const coarse = matchMedia("(pointer: coarse)");
 
     const groundAt = (x: number, y: number) => {
       for (const element of document.elementsFromPoint(x, y)) {
@@ -199,6 +202,7 @@ function useStage(root: RefObject<HTMLDivElement | null>) {
 
     const tone = () => {
       const box = band.getBoundingClientRect();
+      if (box.bottom <= 0) return;
       for (const part of parts) {
         if (!part.offsetParent) continue;
         const rect = part.getBoundingClientRect();
@@ -208,25 +212,38 @@ function useStage(root: RefObject<HTMLDivElement | null>) {
     };
 
     const handed = new Map<string, number>();
+    let held: number | null = null;
     const draw = () => {
       if (still.matches) {
         for (const scene of scenes) {
           scene.el?.style.removeProperty("--y");
           scene.el?.style.removeProperty("--t");
         }
+        tokens.settle();
         tone();
         return;
       }
       const unit = stride();
-      const raw = window.scrollY / unit;
-      const stop = Math.round(raw);
-      const progress = Math.abs(raw - stop) * unit < 1 ? stop : raw;
+      const raw = held ?? window.scrollY / unit;
+      // The last pixels of a snap settling into a stop leave the scenes at rest, so nothing redraws while the phone
+      // eases in; between those edges the scenes move a touch faster and still land exactly on each stop.
+      const base = Math.floor(raw);
+      const edge = SETTLE_PX / unit;
+      const progress = base + clamp01((raw - base - edge) / (1 - 2 * edge));
       const moved: { el: HTMLElement; name: string; t: number }[] = [];
+      const height = stage.clientHeight;
       for (const scene of scenes) {
         if (!scene.el) continue;
         const into = scene.enter === 0 ? 1 : step(progress, scene.enter);
         const out = "exit" in scene ? step(progress, scene.exit) : 0;
-        scene.el.style.setProperty("--y", `${(1 - into) * 100 - out * LIFT}%`);
+        // A covered scene leaves the screen, so nothing laid over its fields, such as a password manager's icon,
+        // shows through the scene on top.
+        const y = out === 1 ? -height : (((1 - into) * 100 - out * LIFT) / 100) * height;
+        // Scenes move by whole device pixels, so a tilted icon isn't redrawn at a new fraction against its words.
+        scene.el.style.setProperty(
+          "--y",
+          `${Math.round(y * devicePixelRatio) / devicePixelRatio}px`,
+        );
         if ("split" in scene) {
           const t = step(progress, scene.split);
           scene.el.style.setProperty("--t", t.toFixed(4));
@@ -242,7 +259,7 @@ function useStage(root: RefObject<HTMLDivElement | null>) {
 
     let frame = 0;
     const onScroll = () => {
-      if (frame) return;
+      if (frame || still.matches) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
         draw();
@@ -269,24 +286,83 @@ function useStage(root: RefObject<HTMLDivElement | null>) {
       if (Math.abs(window.scrollY - y) > 1) window.scrollTo({ top: y, behavior: "instant" });
     };
 
+    // A phone's keyboard reveals its field by scrolling the page, which the stage would play as the story moving
+    // on, so the stage leaves its sticky frame at its stop, the page ends with it, and the scenes hold there until
+    // the field is left.
+    // Leaving the field by tapping Join blurs it before the tap lands, so the scene waits for the tap to finish.
+    let release = 0;
+    const onFocusIn = (event: FocusEvent) => {
+      if (still.matches || !coarse.matches || !(event.target as Element).matches("input")) {
+        scrollToFocusedScene(event);
+        return;
+      }
+      clearTimeout(release);
+      if (held !== null) return;
+      const unit = stride();
+      held = Math.round(window.scrollY / unit);
+      const top = held * unit;
+      stage.style.top = `${top}px`;
+      shell.style.height = `${top + stage.offsetHeight}px`;
+      landing.classList.add("typing");
+    };
+    const onFocusOut = () => {
+      if (held === null) return;
+      const top = parseFloat(stage.style.top);
+      release = window.setTimeout(() => {
+        held = null;
+        stage.style.removeProperty("top");
+        shell.style.removeProperty("height");
+        landing.classList.remove("typing");
+        window.scrollTo({ top, behavior: "instant" });
+      });
+    };
+
+    // A phone lets the page scroll past its end while the keyboard is up, so dragging the page closes the keyboard
+    // and the story scrolls on instead.
+    let dragFrom: number | null = null;
+    const onTouchStart = (event: TouchEvent) => {
+      const from = event.target as Element;
+      dragFrom = held !== null && !from.closest("input") ? event.touches[0]!.clientY : null;
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      if (dragFrom === null || Math.abs(event.touches[0]!.clientY - dragFrom) < 10) return;
+      dragFrom = null;
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    };
+
     draw();
     addEventListener("scroll", onScroll, { passive: true });
     addEventListener("resize", onResize);
     addEventListener("pointerdown", onPointer, true);
     addEventListener("keydown", onKey, true);
-    stage.addEventListener("focusin", scrollToFocusedScene);
+    stage.addEventListener("focusin", onFocusIn);
+    stage.addEventListener("focusout", onFocusOut);
+    addEventListener("touchstart", onTouchStart, { passive: true });
+    addEventListener("touchmove", onTouchMove, { passive: true });
     still.addEventListener("change", onMotion);
     return () => {
       cancelAnimationFrame(frame);
+      clearTimeout(release);
       tokens.stop();
       removeEventListener("scroll", onScroll);
       removeEventListener("resize", onResize);
       removeEventListener("pointerdown", onPointer, true);
       removeEventListener("keydown", onKey, true);
-      stage.removeEventListener("focusin", scrollToFocusedScene);
+      stage.removeEventListener("focusin", onFocusIn);
+      stage.removeEventListener("focusout", onFocusOut);
+      removeEventListener("touchstart", onTouchStart);
+      removeEventListener("touchmove", onTouchMove);
       still.removeEventListener("change", onMotion);
     };
   }, [root]);
+}
+
+function Shadow({ art }: { art: string }) {
+  return (
+    <span className="sh">
+      <span style={{ maskImage: art }} />
+    </span>
+  );
 }
 
 function Token({
@@ -314,7 +390,9 @@ function Token({
             key={src}
             className={`tk-pic${buzz ? " buzz" : ""}${index === 0 ? " on" : ""}`}
             style={{ "--art": src, "--r": TILTS[index] }}
-          />
+          >
+            <Shadow art={buzz ? BUZZ_EDGE : src} />
+          </span>
         ))}
       </span>
       {children}
@@ -429,7 +507,9 @@ function Offer({ offer, z }: { offer: (typeof OFFERS)[number]; z: string }) {
               className="it-st"
               aria-hidden
               style={{ "--art": sticker(item.icon), "--r": TILTS[index] }}
-            />
+            >
+              <Shadow art={sticker(item.icon)} />
+            </span>
             <div className="it-tx">
               <b className="it-t type-display text-item-title">{item.title}</b>
               <p
