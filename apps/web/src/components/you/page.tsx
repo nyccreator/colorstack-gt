@@ -803,7 +803,7 @@ function Editor({
                     data-act="rm-yes"
                     aria-busy={res.busy === "remove" || undefined}
                   >
-                    {res.busy === "remove" ? "Removing…" : "Remove"}
+                    {res.busy === "remove" && res.slow ? "Removing…" : "Remove"}
                   </button>
                   <button type="button" className="q" data-act="rm-no" disabled={!!res.busy}>
                     Keep it
@@ -820,7 +820,11 @@ function Editor({
                     data-act="upload"
                     aria-busy={res.busy === "upload" || undefined}
                   >
-                    {res.busy === "upload" ? "Uploading…" : resume ? "Replace PDF" : "Upload a PDF"}
+                    {res.busy === "upload" && res.slow
+                      ? "Uploading…"
+                      : resume
+                        ? "Replace PDF"
+                        : "Upload a PDF"}
                   </button>
                   {resume ? (
                     <>

@@ -11,11 +11,10 @@ import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "rea
 import { z } from "zod";
 
 import { authClient } from "@/lib/auth-client";
-import { useSlowHold } from "@/lib/motion";
+import { still, useSlowHold } from "@/lib/motion";
 import { landing, signedIn } from "@/lib/session";
 
-import { Bar } from "./frame";
-import { Message } from "./message";
+import { BusyLabel, Message } from "./message";
 import { progressRoom } from "./onboarding/controls";
 
 const COPY = {
@@ -226,7 +225,7 @@ function EmailStep({
           aria-busy={pending || undefined}
           className="mt-4 btn-solid"
         >
-          {slow ? "Sending…" : "Send code"}
+          <BusyLabel slow={slow} idle="Send code" busy="Sending…" />
         </button>
       </form>
 
@@ -257,6 +256,7 @@ function CodeStep({
   const navigate = useNavigate();
   const convex = useConvex();
   const input = useRef<HTMLInputElement>(null);
+  const boxes = useRef<HTMLDivElement>(null);
 
   const [code, setCode] = useState("");
   const [triesLeft, setTriesLeft] = useState(OTP_ALLOWED_ATTEMPTS);
@@ -314,6 +314,11 @@ function CodeStep({
     if (left <= 0) return setRetired("used");
     setWrong(true);
     input.current?.select();
+    if (!still())
+      boxes.current?.animate(
+        [0, -8, 8, -6, 6, -3, 0].map((x) => ({ transform: `translateX(${x}px)` })),
+        { duration: 360 },
+      );
   }
 
   async function resend() {
@@ -362,7 +367,7 @@ function CodeStep({
           aria-describedby="gate-title gate-line"
           className="mt-6 roomy:mt-8 btn-solid"
         >
-          {resending ? "Sending…" : "Send new code"}
+          <BusyLabel slow={resending} idle="Send new code" busy="Sending…" />
         </button>
         {error ? <Message tone="error">{error}</Message> : null}
         <Links>{changeEmail}</Links>
@@ -425,6 +430,7 @@ function CodeStep({
             className="absolute inset-x-0 top-1/2 z-10 h-[max(100%,44px)] -translate-y-1/2 cursor-text p-0 text-base opacity-0"
           />
           <div
+            ref={boxes}
             aria-hidden
             className={`flex justify-between gap-3 rounded-full ${wrong || short ? "outline-2 outline-offset-4 outline-azalea" : ""}`}
           >
@@ -462,7 +468,7 @@ function CodeStep({
           aria-busy={pending || undefined}
           className="mt-4 btn-solid"
         >
-          {verifying ? "Verifying…" : "Verify code"}
+          <BusyLabel slow={verifying} idle="Verify code" busy="Verifying…" />
         </button>
       </form>
 
@@ -501,34 +507,31 @@ export function Gate({
   const sentTo = sent && isGeorgiaTechEmail(initial) ? normalizeEmail(initial) : null;
 
   return (
-    <div className="min-h-dvh bg-blue-bright px-edge pt-anchor pb-10 roomy:pb-16">
-      <Bar />
-      <main className="mx-auto w-full max-w-gate">
-        <div aria-hidden className={progressRoom} />
-        {sentTo ? (
-          <CodeStep
-            key={sentTo}
-            email={sentTo}
+    <main className="mx-auto w-full max-w-gate">
+      <div aria-hidden className={progressRoom} />
+      {sentTo ? (
+        <CodeStep
+          key={sentTo}
+          email={sentTo}
+          redirect={redirect}
+          onChangeEmail={() =>
+            void navigate({ to: path, search: { email: sentTo, redirect }, replace: true })
+          }
+        />
+      ) : (
+        <div key="email" className="animate-rise">
+          <EmailStep
+            variant={variant}
+            email={email}
+            setEmail={setEmail}
+            focus={Boolean(initial)}
             redirect={redirect}
-            onChangeEmail={() =>
-              void navigate({ to: path, search: { email: sentTo, redirect }, replace: true })
+            onSent={(address) =>
+              void navigate({ to: path, search: { email: address, sent: true, redirect } })
             }
           />
-        ) : (
-          <div key="email" className="animate-rise">
-            <EmailStep
-              variant={variant}
-              email={email}
-              setEmail={setEmail}
-              focus={Boolean(initial)}
-              redirect={redirect}
-              onSent={(address) =>
-                void navigate({ to: path, search: { email: address, sent: true, redirect } })
-              }
-            />
-          </div>
-        )}
-      </main>
-    </div>
+        </div>
+      )}
+    </main>
   );
 }

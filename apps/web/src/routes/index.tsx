@@ -5,7 +5,7 @@ import { type FormEvent, type RefObject, useEffect, useRef, useState } from "rea
 
 import { sendCode } from "@/components/gate";
 import { Mark } from "@/components/mark";
-import { Message } from "@/components/message";
+import { BusyLabel, Message } from "@/components/message";
 import { startTokens } from "@/components/tokens";
 import { useSlow } from "@/lib/motion";
 
@@ -467,11 +467,9 @@ function JoinField({ id }: { id: string }) {
           type="submit"
           disabled={pending}
           aria-busy={pending || undefined}
-          data-slow={slow || undefined}
           className="lp-btn lp-send"
         >
-          <span aria-hidden={slow}>Join</span>
-          <span aria-hidden={!slow}>Sending…</span>
+          <BusyLabel slow={slow} idle="Join" busy="Sending…" />
         </button>
       </form>
       <div className="lp-reveal" aria-hidden={!shown}>

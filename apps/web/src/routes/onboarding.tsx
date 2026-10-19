@@ -33,7 +33,7 @@ import {
 } from "@/components/member/draft";
 import { TITLES } from "@/components/member/groups";
 import { breaks, summary } from "@/components/member/summary";
-import { Message } from "@/components/message";
+import { BusyLabel, Message } from "@/components/message";
 import { FirstName, pin, Progress, Tick } from "@/components/onboarding/controls";
 import { Body, QUESTIONS, type Slug, useChecks } from "@/components/onboarding/screens";
 import { type Answers, type Profile, useMember } from "@/lib/member";
@@ -133,7 +133,7 @@ function Shell({ pinned, children }: { pinned?: boolean; children?: ReactNode })
 
 function Actions({
   pinned,
-  busy,
+  busy = false,
   label,
   skip,
   hideSkip,
@@ -141,7 +141,7 @@ function Actions({
   onSkip,
 }: {
   pinned: boolean;
-  busy?: string;
+  busy?: boolean;
   label: string;
   skip?: string;
   hideSkip?: boolean;
@@ -171,7 +171,7 @@ function Actions({
               type="button"
               data-skip
               onClick={onSkip}
-              disabled={Boolean(busy)}
+              disabled={busy}
               inert={hideSkip || undefined}
               className="btn-quiet min-w-0 overflow-hidden px-0! whitespace-nowrap"
             >
@@ -179,13 +179,8 @@ function Actions({
             </button>
           </div>
         ) : null}
-        <button
-          type="submit"
-          disabled={Boolean(busy)}
-          aria-busy={busy ? true : undefined}
-          className="btn-solid"
-        >
-          {busy ?? label}
+        <button type="submit" disabled={busy} aria-busy={busy || undefined} className="btn-solid">
+          <BusyLabel slow={busy} idle={label} busy="Saving…" />
         </button>
       </div>
     </div>
@@ -271,7 +266,6 @@ function Welcome({
           from={answered}
           total={QUESTIONS.length}
           label={`${answered} of ${QUESTIONS.length} questions answered`}
-          bare
         />
         <div ref={box}>
           <h1
@@ -425,7 +419,7 @@ function Ask({
   const lastOfGroup = QUESTIONS[at + 1]?.group !== question.group;
   const chosen = hasAnswer(question.slug, draft, me, upload);
   const skip = !edit && "skip" in question ? question.skip : undefined;
-  const busy = pending && slow ? "Saving…" : undefined;
+  const busy = pending && slow;
   const tapSave = useRef<Promise<unknown> | null>(null);
   const held = () => locked() || pending;
 
@@ -553,7 +547,7 @@ function Ask({
           at={place.at}
           from={place.from}
           total={place.total}
-          disabled={Boolean(busy)}
+          disabled={busy}
           back={backLabel}
           onBack={back && (() => !held() && back())}
         />

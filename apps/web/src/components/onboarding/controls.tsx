@@ -196,7 +196,6 @@ export function Progress({
   back = "Previous question",
   label,
   onBack,
-  bare,
 }: {
   at: number;
   from: number;
@@ -205,7 +204,6 @@ export function Progress({
   back?: string;
   label?: string;
   onBack?: () => void;
-  bare?: boolean;
 }) {
   const fill = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -215,25 +213,20 @@ export function Progress({
       { duration: 300, easing: ENTER },
     );
   }, [at, from, total]);
-  // The arrow is invisible rather than absent, so the bar doesn't shift between questions.
+  // The arrow is invisible rather than absent, so the bar doesn't shift between questions and the list.
   return (
-    <div
-      data-progress
-      className={`${progressRoom} flex items-center gap-3.5 ${bare ? "" : "-ml-3.5"}`}
-    >
-      {bare ? null : (
-        <button
-          type="button"
-          onClick={onBack}
-          disabled={disabled}
-          aria-label={back}
-          className={`grid size-12 flex-none cursor-pointer place-items-center rounded-full text-diploma/86 transition-[background-color,color] hover:bg-diploma/13 hover:text-diploma active:bg-diploma/13 disabled:cursor-wait disabled:text-diploma/45 disabled:hover:bg-transparent ${
-            onBack ? "" : "invisible"
-          }`}
-        >
-          <i aria-hidden className="ic back size-6" />
-        </button>
-      )}
+    <div data-progress className={`${progressRoom} -ml-3.5 flex items-center gap-3.5`}>
+      <button
+        type="button"
+        onClick={onBack}
+        disabled={disabled}
+        aria-label={back}
+        className={`grid size-12 flex-none cursor-pointer place-items-center rounded-full text-diploma/86 transition-[background-color,color] hover:bg-diploma/13 hover:text-diploma active:bg-diploma/13 disabled:cursor-wait disabled:text-diploma/45 disabled:hover:bg-transparent ${
+          onBack ? "" : "invisible"
+        }`}
+      >
+        <i aria-hidden className="ic back size-6" />
+      </button>
       <div aria-hidden className="h-1 flex-1 overflow-hidden rounded-full bg-diploma/16">
         <div
           ref={fill}

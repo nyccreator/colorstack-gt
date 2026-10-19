@@ -53,6 +53,7 @@ export type Ed = {
 export type Res = {
   confirm: boolean;
   busy: "upload" | "remove" | null;
+  slow: boolean;
   error: string | null;
   uploaded: Resume | null;
   book: "in" | "out" | null;
@@ -148,6 +149,7 @@ export function createEditing(deps: Deps) {
   const res: Res = {
     confirm: false,
     busy: null,
+    slow: false,
     error: null,
     uploaded: null,
     book: null,
@@ -648,6 +650,7 @@ export function createEditing(deps: Deps) {
     Object.assign(res, {
       confirm: false,
       busy: null,
+      slow: false,
       error: null,
       uploaded: null,
       book: null,
@@ -996,15 +999,25 @@ export function createEditing(deps: Deps) {
     if (focus && ed) $(focus, form())?.focus({ preventScroll: true });
   }
 
+  const slowRes = (e: Ed | null) =>
+    slowLabel(() => {
+      if (ed !== e) return;
+      res.slow = true;
+      emit();
+    });
+
   // The resume actions finish only in the editor they started in; a reopened one has its own `res`.
   async function upload(file: File | undefined) {
     const e = ed;
     if (!file || !e) return;
     Object.assign(res, { busy: "upload", error: null });
     paintRes("#replace");
+    const settle = slowRes(e);
     const result = await deps.upload(file);
+    const hold = settle();
+    if (hold) await hold;
     if (ed !== e) return;
-    res.busy = null;
+    Object.assign(res, { busy: null, slow: false });
     if (!result.ok) {
       res.error = result.error;
       paintResMoving('[data-keys="resume"] > .err', "#replace");
@@ -1020,18 +1033,25 @@ export function createEditing(deps: Deps) {
     const e = ed;
     res.busy = "remove";
     paintRes("[data-act=rm-yes]");
+    const settle = slowRes(e);
+    let failure: unknown = null;
     try {
       await deps.removeResume();
-      if (ed !== e) return;
-      Object.assign(res, { confirm: false, busy: null, error: null, uploaded: null });
-      paintResMoving('[data-keys="resume"] .fa', "#replace");
-      announce("Resume removed. You're out of the resume book.");
-    } catch (failure) {
-      if (ed !== e) return;
-      Object.assign(res, { busy: null, error: failureText(failure) });
-      paintResMoving('[data-keys="resume"] > .err', "[data-act=rm-yes]");
-      announce(failureText(failure));
+    } catch (caught) {
+      failure = caught ?? MESSAGES.failed;
     }
+    const hold = settle();
+    if (hold) await hold;
+    if (ed !== e) return;
+    Object.assign(res, { busy: null, slow: false });
+    if (failure) {
+      res.error = failureText(failure);
+      paintResMoving('[data-keys="resume"] > .err', "[data-act=rm-yes]");
+      return announce(res.error);
+    }
+    Object.assign(res, { confirm: false, error: null, uploaded: null });
+    paintResMoving('[data-keys="resume"] .fa', "#replace");
+    announce("Resume removed. You're out of the resume book.");
   }
 
   async function toggleBook(on: boolean) {
