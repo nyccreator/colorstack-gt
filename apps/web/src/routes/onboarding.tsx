@@ -1,18 +1,20 @@
 import { api } from "@colorstack-gt/backend/convex/_generated/api";
+import { GROUPS, type Group, isOptional } from "@colorstack-gt/backend/convex/lib/groups";
 import {
   createFileRoute,
   Navigate,
-  redirect,
+  useLocation,
   useNavigate,
   useRouter,
 } from "@tanstack/react-router";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import {
   type KeyboardEvent,
   type ReactNode,
   type RefObject,
   useCallback,
   useEffect,
+  useEffectEvent,
   useId,
   useLayoutEffect,
   useRef,
@@ -21,41 +23,37 @@ import {
 import { z } from "zod";
 
 import { Bar, Waiting } from "@/components/frame";
-import { quiet, solid } from "@/components/gate";
-import { Message } from "@/components/message";
-import { FirstName, pin, Progress, Tick } from "@/components/onboarding/controls";
-import { APPEAR, BUSY_AFTER, ENTER, EXIT, still } from "@/lib/motion";
-import { breaks } from "@/components/you/page";
-import { CLASS_STANDINGS, HOBBIES, LOOKING_FOR, STAGES } from "@/components/onboarding/options";
 import {
-  Body,
-  checksFor,
+  errorsFor,
   type Draft,
   draftFrom,
   failureText,
-  type Group,
   passes,
-  type Profile,
-  QUESTIONS,
-  saved,
-  type Slug,
-  useChecks,
   useSave,
-} from "@/components/onboarding/screens";
-
-const SLUGS = QUESTIONS.map((question) => question.slug) as unknown as [Slug, ...Slug[]];
+} from "@/components/member/draft";
+import { TITLES } from "@/components/member/groups";
+import { breaks, summary } from "@/components/member/summary";
+import { Message } from "@/components/message";
+import { FirstName, pin, Progress, Tick } from "@/components/onboarding/controls";
+import { Body, QUESTIONS, type Slug, useChecks } from "@/components/onboarding/screens";
+import { type Answers, type Profile, useMember } from "@/lib/member";
+import { BUSY_AFTER, cue, ENTER, slide, still } from "@/lib/motion";
+import { requireSession } from "@/lib/session";
 
 const searchSchema = z.object({
-  q: z.enum(SLUGS).optional().catch(undefined),
+  q: z
+    .enum(QUESTIONS.map((question) => question.slug))
+    .optional()
+    .catch(undefined),
   gated: z.boolean().optional().catch(undefined),
   edit: z.boolean().optional().catch(undefined),
 });
 
+type Search = z.infer<typeof searchSchema>;
+
 export const Route = createFileRoute("/onboarding")({
   validateSearch: searchSchema,
-  beforeLoad: ({ context }) => {
-    if (!context.isAuthenticated) throw redirect({ to: "/sign-in" });
-  },
+  beforeLoad: requireSession,
   head: ({ match }) => ({
     meta: [
       { title: `${match.search.edit ? "Your answers" : "Welcome"} · ColorStack at Georgia Tech` },
@@ -64,8 +62,24 @@ export const Route = createFileRoute("/onboarding")({
   component: Onboarding,
 });
 
-const GROUPS: Group[] = ["name", "contact", "studies", "materials", "interests", "background"];
-const OPTIONAL: ReadonlySet<Group> = new Set(["materials", "interests"]);
+// Every navigation inside onboarding writes this into its history entry, so Back and Forward carry it.
+type Hop = {
+  from?: Slug;
+  opened?: { group: Group; listIndex: number };
+};
+
+declare module "@tanstack/react-router" {
+  interface HistoryState {
+    hop?: Hop;
+  }
+}
+
+type Screen =
+  | { kind: "hub" }
+  | { kind: "redirect"; search: Search }
+  | { kind: "list" }
+  | { kind: "ask"; at: number; editing: boolean; backToList: boolean };
+
 const COUNT = [
   "No",
   "One",
@@ -85,32 +99,27 @@ const COUNT = [
 ];
 
 const TYPED: ReadonlySet<Slug> = new Set(["name", "contact", "major", "career"]);
+const BEAT = 350;
 
 type Arrival = { dir: number; group?: Group };
 const isText = (el: unknown): el is HTMLInputElement =>
   el instanceof HTMLInputElement && !["checkbox", "file", "radio"].includes(el.type);
 
-// The main button is pinned to the bottom of the screen until the screen is tall enough to show it under the longest
-// question, but not on a screen too short to spare the room.
-const PINNED = `${pin} tall:static tall:mt-8 tall:bg-transparent tall:p-0 tall:before:hidden [@media(max-height:499px)]:static [@media(max-height:499px)]:mt-6 [@media(max-height:499px)]:bg-transparent [@media(max-height:499px)]:p-0 [@media(max-height:499px)]:before:hidden`;
+const PINNED = `${pin} tall:unpinned tall:mt-8 short:unpinned short:mt-6`;
 
 const flowing = () => {
   const el = document.querySelector<HTMLElement>("[data-actions]");
   return el && getComputedStyle(el).position !== "fixed" ? el : null;
 };
 
-// The answers and, when it sits in the flow, the main button rise in together.
 function rise(el: HTMLElement | null | undefined, dir: number) {
   if (still() || !el) return null;
-  const frames = [
-    { opacity: 0, transform: `translateY(${16 * dir}px)` },
-    { opacity: 1, transform: "none" },
-  ];
-  flowing()?.animate(frames, { duration: 300, easing: ENTER });
+  const actions = flowing();
+  if (actions) slide(actions, true, dir);
   document
     .querySelector("[data-pin] [data-skip]:not([inert])")
     ?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, easing: ENTER });
-  return el.animate(frames, { duration: 300, easing: ENTER });
+  return slide(el, true, dir);
 }
 
 function Shell({ pinned, children }: { pinned?: boolean; children?: ReactNode }) {
@@ -119,9 +128,7 @@ function Shell({ pinned, children }: { pinned?: boolean; children?: ReactNode })
       <Bar signOut />
       <main
         className={`mx-auto w-full max-w-gate pt-anchor ${
-          pinned
-            ? "pb-[calc(var(--spacing-control-lg)+5rem)] tall:pb-16 [@media(max-height:499px)]:pb-10"
-            : "pb-10 roomy:pb-16"
+          pinned ? "pb-pinned tall:pb-16 short:pb-10" : "pb-10 roomy:pb-16"
         }`}
       >
         {children}
@@ -153,14 +160,13 @@ function Actions({
     >
       <div className="mx-auto flex w-full max-w-gate items-center tall:flex-col tall:items-stretch">
         {skip ? (
-          // Once something is chosen Skip folds away, so Continue widens rather than jumping.
           <button
             type="button"
             data-skip
             onClick={onSkip}
             disabled={Boolean(busy)}
             inert={hideSkip || undefined}
-            className={`${quiet} flex-none overflow-hidden whitespace-nowrap transition-[max-width,margin,padding,opacity] duration-200 motion-reduce:transition-none tall:order-last tall:mt-3 tall:mr-0 tall:self-center ${
+            className={`btn-quiet flex-none overflow-hidden whitespace-nowrap transition-[max-width,margin,padding,opacity] duration-200 motion-reduce:transition-none tall:order-last tall:mt-3 tall:mr-0 tall:self-center ${
               hideSkip ? "mr-0 max-w-0 px-0! opacity-0 tall:hidden" : "mr-3 max-w-60"
             }`}
           >
@@ -171,7 +177,7 @@ function Actions({
           type="submit"
           disabled={Boolean(busy)}
           aria-busy={busy ? true : undefined}
-          className={solid}
+          className="btn-solid"
         >
           {busy ?? label}
         </button>
@@ -181,83 +187,10 @@ function Actions({
 }
 
 const words = (n: number, one: string, many: string) => `${COUNT[n] ?? n} ${n === 1 ? one : many}`;
-const labelled = (
-  options: readonly { value: string; label: string }[],
-  values: readonly string[] = [],
-) => options.filter((option) => values.includes(option.value)).map((option) => option.label);
-const listed = (parts: string[]) =>
-  parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}` : (parts[0] ?? "");
 
-// What each saved group says on the list, as the You page shows it; background answers are never echoed.
-function summary(me: Profile, group: Group) {
-  switch (group) {
-    case "name":
-      return [
-        me.name && `${me.name.firstName} ${me.name.lastName}`,
-        me.name?.pronouns?.replace(/ \/ /g, "\u00a0/\u00a0"),
-      ]
-        .filter(Boolean)
-        .join(" · ");
-    case "contact":
-      return me.contact
-        ? `${me.contact.personalEmail} · ${me.contact.phone.replace(/-/g, "\u2011")}`
-        : "";
-    case "studies":
-      return me.studies
-        ? `${labelled(CLASS_STANDINGS, [me.studies.classStanding])[0]} · ${me.studies.major}`
-        : "";
-    case "materials": {
-      const parts = [
-        me.resume ? "Resume" : "",
-        me.materials?.linkedin ? "LinkedIn" : "",
-        me.materials?.github ? "GitHub" : "",
-      ].filter(Boolean);
-      return listed(parts) || "Skipped";
-    }
-    case "background":
-      return "Saved privately";
-    case "interests": {
-      const all = [
-        ...labelled(LOOKING_FOR, me.interests?.lookingFor),
-        ...labelled(HOBBIES, me.interests?.hobbies),
-      ];
-      if (!all.length) return "Skipped";
-      return all.length > 3
-        ? `${all.slice(0, 2).join(", ")} +\u00a0${all.length - 2}\u00a0more`
-        : all.join(", ");
-    }
-  }
-}
-
-// As on the You page, a tick stands where the row's arrow was, then leaves, once the group it opens has saved.
 function SavedTick({ onDone }: { onDone: () => void }) {
   const el = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    const tick = el.current;
-    if (!tick) return;
-    tick.animate(
-      [
-        { opacity: 0, transform: still() ? "none" : "translateX(-6px)" },
-        { opacity: 1, transform: "none" },
-      ],
-      {
-        duration: still() ? 120 : 200,
-        delay: 180,
-        easing: APPEAR,
-        fill: "backwards",
-      },
-    );
-    const timer = setTimeout(() => {
-      tick
-        .animate([{ opacity: 1 }, { opacity: 0 }], {
-          duration: 400,
-          easing: "ease-in",
-          fill: "forwards",
-        })
-        .finished.then(onDone, () => {});
-    }, 2800);
-    return () => clearTimeout(timer);
-  }, [onDone]);
+  useEffect(() => (el.current ? cue(el.current, onDone, 180) : undefined), [onDone]);
   return (
     <span ref={el} className="flex-none text-burdell">
       <Tick className="size-4.5" />
@@ -280,18 +213,15 @@ function Welcome({
   box: RefObject<HTMLDivElement | null>;
   enter: Arrival | null;
   settle: () => void;
-  onGo: () => void;
+  onGo: (open: Group) => void;
   onOpen: (group: Group) => void;
 }) {
-  // A member who has finished sees the same list as their answers, every part open to change.
   const review = me.complete;
   const title = useRef<HTMLHeadingElement>(null);
   const arrival = useRef(enter);
   const [ticked, setTicked] = useState(enter && enter.dir > 0 ? (enter.group ?? null) : null);
   const untick = useCallback(() => setTicked(null), []);
-  const open = GROUPS.findIndex((group) => !saved(me, group));
-  // The list rises in the way the member went, as a question does; back from a group, that group's row takes focus.
-  // Arriving fresh, the group still to answer comes into view, clear of the pinned button, though the title keeps focus.
+  const open = GROUPS.findIndex((group) => !me.saved[group]);
   useLayoutEffect(() => {
     const { dir, group } = arrival.current ?? { dir: 1 };
     window.scrollTo(0, 0);
@@ -306,7 +236,7 @@ function Welcome({
   }, [box, settle, open]);
   const left = (optional: boolean) =>
     QUESTIONS.filter(
-      (question) => !saved(me, question.group) && OPTIONAL.has(question.group) === optional,
+      (question) => !me.saved[question.group] && isOptional(question.group) === optional,
     ).length;
   const extra = left(true);
   const answered = QUESTIONS.length - left(false) - extra;
@@ -316,7 +246,7 @@ function Welcome({
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
-          onGo();
+          onGo(GROUPS[open] ?? "name");
         }}
       >
         <Progress
@@ -357,21 +287,21 @@ function Welcome({
           </p>
           <ol className="mt-6 rounded-3xl bg-navy/36 p-1 roomy:mt-8">
             {GROUPS.map((group, i) => {
-              const done = saved(me, group);
+              const done = me.saved[group];
               const n = QUESTIONS.filter((question) => question.group === group).length;
               const text = (
                 <span className="min-w-0 flex-1">
                   <span className="block text-fine text-diploma/70 roomy:text-label">
-                    {STAGES[i]?.title}
+                    {TITLES[group]}
                   </span>
                   <span
-                    className={`mt-0.5 block type-heading text-control leading-tight tracking-[-0.005em] wrap-break-word roomy:text-value ${
+                    className={`mt-0.5 block type-display text-control leading-tight tracking-[-0.005em] wrap-break-word roomy:text-value ${
                       done ? "" : "text-diploma/64"
                     }`}
                   >
                     {done
                       ? breaks(summary(me, group))
-                      : `${OPTIONAL.has(group) ? "Optional · " : ""}${n} ${n === 1 ? "question" : "questions"}`}
+                      : `${isOptional(group) ? "Optional · " : ""}${n} ${n === 1 ? "question" : "questions"}`}
                   </span>
                 </span>
               );
@@ -383,7 +313,7 @@ function Welcome({
                     <button
                       type="button"
                       data-group={group}
-                      onClick={() => (done || review ? onOpen(group) : onGo())}
+                      onClick={() => (done || review ? onOpen(group) : onGo(group))}
                       className={`${row} cursor-pointer transition-[background-color] hover:bg-diploma/5 focus-visible:outline-offset-2 active:bg-diploma/8`}
                     >
                       {text}
@@ -442,27 +372,18 @@ function Ask({
   const question = QUESTIONS[at]!;
   const titleId = useId();
   const title = useRef<HTMLHeadingElement>(null);
-  const check = useChecks(checksFor(question.slug, draft));
+  const check = useChecks(errorsFor(question.fields, draft));
   const save = useSave();
   const skipGroup = useMutation(api.members.skip);
   const [pending, setPending] = useState(false);
   const [slow, setSlow] = useState(false);
-  // The resume field says it's uploading; pressing on waits for the upload rather than saying so again.
-  const upload = useRef<{ on: boolean; done?: (ok: boolean) => void }>({ on: false });
-  const [uploading, setUploading] = useState(false);
-  const uploaded = () =>
-    upload.current.on
-      ? new Promise<boolean>((resolve) => {
-          upload.current.done = resolve;
-        })
-      : Promise.resolve(true);
-  // Continue or Skip pressed during an upload waits for it, saying Saving… meanwhile since that's what the press will
-  // do, and stays put with its message if it failed.
+  const [upload, setUpload] = useState<Promise<boolean> | null>(null);
+  // Pressing on during an upload waits for it under Saving… and stays on this question if it fails.
   async function afterUpload() {
-    if (!upload.current.on) return true;
+    if (!upload) return true;
     setPending(true);
     setSlow(true);
-    const ok = await uploaded();
+    const ok = await upload;
     if (!ok) setSlow(false);
     setPending(false);
     return ok;
@@ -471,17 +392,15 @@ function Ask({
   const [beat, setBeat] = useState(0);
   const alive = useRef(true);
   const lastOfGroup = QUESTIONS[at + 1]?.group !== question.group;
-  // Skip goes once something is chosen, since skipping would throw it away.
   const chosen =
     question.slug === "career"
-      ? Boolean(draft.linkedin.trim() || draft.github.trim() || me.resume || uploading)
+      ? Boolean(draft.linkedin.trim() || draft.github.trim() || me.resume || upload)
       : question.slug === "goals"
         ? draft.lookingFor.length > 0
         : question.slug === "hobbies" && draft.hobbies.length > 0;
   const skip = !edit && "skip" in question ? question.skip : undefined;
   const busy = pending && slow ? "Saving…" : undefined;
-  // A group's last single answer starts saving when it's tapped, so the beat before moving on covers the save.
-  const early = useRef<Promise<unknown> | null>(null);
+  const tapSave = useRef<Promise<unknown> | null>(null);
   const held = () => locked() || pending;
 
   useEffect(() => {
@@ -491,7 +410,6 @@ function Ask({
     };
   }, []);
 
-  // A quick save never flashes Saving… on the button.
   async function onward(store: () => Promise<unknown>) {
     setPending(true);
     setProblem(null);
@@ -505,7 +423,7 @@ function Ask({
       return setProblem(failureText(failure));
     }
     clearTimeout(shown);
-    // The member may have gone back while it saved, and then stays where they went.
+    // If browser Back unmounted this question while it saved, the member stays where they went.
     if (!alive.current) return;
     const following = QUESTIONS[at + 1];
     if (following && !edit) await go(following.slug);
@@ -515,8 +433,8 @@ function Ask({
   async function next() {
     if (held() || !check.ready()) return;
     if (!lastOfGroup) return void go(QUESTIONS[at + 1]!.slug);
-    const started = early.current;
-    early.current = null;
+    const started = tapSave.current;
+    tapSave.current = null;
     if (!(await afterUpload())) return;
     await onward(() => started ?? save(question.group, draft, me));
   }
@@ -526,7 +444,7 @@ function Ask({
     if (question.slug === "career") {
       if (!(await afterUpload())) return;
       set({ linkedin: "", github: "", resumeBook: false });
-      return onward(() => skipGroup({ step: 4 }));
+      return onward(() => skipGroup({ group: "materials" }));
     }
     if (question.slug === "goals") {
       set({ lookingFor: [] });
@@ -537,20 +455,13 @@ function Ask({
     await onward(() => save("interests", d, me));
   }
 
-  // A single answer moves on by itself after a beat long enough to see it chosen, saving the newest draft.
-  const latest = useRef(next);
-  useLayoutEffect(() => {
-    latest.current = next;
-  });
+  const advance = useEffectEvent(() => void next());
   useEffect(() => {
     if (!beat) return;
-    const timer = setTimeout(() => void latest.current(), 350);
+    const timer = setTimeout(advance, BEAT);
     return () => clearTimeout(timer);
   }, [beat]);
 
-  // Each question rises in from the way the member is going and takes focus: the first field with a mouse, or else the
-  // question itself.
-  // Changing a group's answers, the bar counts that group's questions only, since it ends back at the list.
   const section = QUESTIONS.filter((x) => x.group === question.group);
   const before = QUESTIONS[from];
   const place = edit
@@ -566,6 +477,7 @@ function Ask({
     window.scrollTo(0, 0);
     // Only the first moment of arriving ignores taps, so a double tap on the last answer can't answer this one too.
     const el = box.current;
+    // oxlint-disable-next-line react/immutability -- The box is a DOM node passed in as a ref.
     if (el) el.style.pointerEvents = "none";
     const open = setTimeout(() => el && (el.style.pointerEvents = ""), 120);
     const motion = rise(el, enter.current);
@@ -641,12 +553,9 @@ function Ask({
               set={set}
               check={check}
               titleId={titleId}
-              setUploading={(on, failed) => {
-                upload.current.on = on;
-                setUploading(on);
-                if (on) return;
-                upload.current.done?.(!failed);
-                upload.current.done = undefined;
+              onUpload={(settled) => {
+                setUpload(settled);
+                void settled.finally(() => setUpload((u) => (u === settled ? null : u)));
               }}
               onPick={(settled, patch) => {
                 const moves = settled && "pick" in question;
@@ -656,7 +565,7 @@ function Ask({
                     ? save(question.group, { ...draft, ...patch }, me)
                     : null;
                 started?.catch(() => {});
-                early.current = started;
+                tapSave.current = started;
               }}
             />
           </div>
@@ -675,101 +584,111 @@ function Ask({
   );
 }
 
-// Until a member has finished, a question shows only once every group before it is saved, or skipped if optional,
-// and the questions before it in its group are answered; anything else goes to the first one still open.
 function reach(at: number, draft: Draft, me: Profile) {
   const group = QUESTIONS[at]!.group;
   for (let i = 0; i < at; i++) {
     const other = QUESTIONS[i]!;
     if (other.group === group) {
-      if (!passes(other.slug, draft)) return i;
-    } else if (!me.complete && !saved(me, other.group)) {
+      if (!passes(other.fields, draft)) return i;
+    } else if (!me.complete && !me.saved[other.group]) {
       const same = QUESTIONS.flatMap((x, j) => (x.group === other.group ? [j] : []));
-      return same.find((j) => !passes(QUESTIONS[j]!.slug, draft)) ?? same.at(-1)!;
+      return same.find((j) => !passes(QUESTIONS[j]!.fields, draft)) ?? same.at(-1)!;
     }
   }
   return at;
 }
 
-function Flow({
-  me,
-  answers,
-  q,
-  gated,
-  edit,
-}: {
-  me: Profile;
-  answers: Parameters<typeof draftFrom>[1];
-  q?: Slug;
-  gated: boolean;
-  edit: boolean;
-}) {
+const indexOf = (q: Slug | undefined) =>
+  q ? QUESTIONS.findIndex((question) => question.slug === q) : -1;
+
+function screenFor(
+  me: Profile,
+  draft: Draft,
+  search: Search,
+  completeAtLoad: boolean,
+  hop: Hop | undefined,
+): Screen {
+  const at = indexOf(search.q);
+  if (at < 0) {
+    if (me.complete && !search.edit) return { kind: "hub" };
+    if (GROUPS.every((group) => !me.saved[group]))
+      return { kind: "redirect", search: { q: "name" } };
+    return { kind: "list" };
+  }
+  const { group } = QUESTIONS[at]!;
+  const editing = (Boolean(search.edit) || completeAtLoad) && (me.complete || me.saved[group]);
+  const gated = search.gated || undefined;
+  if (search.edit && !editing) return { kind: "redirect", search: { q: search.q, gated } };
+  const blocked = reach(at, draft, me);
+  if (blocked !== at) {
+    return {
+      kind: "redirect",
+      search: { q: QUESTIONS[blocked]!.slug, edit: search.edit || undefined, gated },
+    };
+  }
+  const firstOfGroup = QUESTIONS[at - 1]?.group !== group;
+  return {
+    kind: "ask",
+    at,
+    editing,
+    backToList: firstOfGroup && (editing || hop?.opened?.group === group),
+  };
+}
+
+function Flow({ me, answers, search }: { me: Profile; answers: Answers | null; search: Search }) {
   const navigate = useNavigate();
   const router = useRouter();
+  const hop = useLocation({ select: (location) => location.state.hop });
   const [draft, setDraft] = useState(() => draftFrom(me, answers));
+  const [completeAtLoad] = useState(me.complete);
+  const [arrival, setArrival] = useState<Arrival | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const moving = useRef(false);
-  const arrive = useRef<Arrival | null>(null);
-  // The group opened from the list, and where the list sits in history.
-  const opened = useRef<{ group: Group; from: number } | null>(null);
-  const place = () => router.history.location.state.__TSR_index;
-  const [finished] = useState(me.complete);
-  const trail = useRef<Slug[]>([]);
-  const at = q ? QUESTIONS.findIndex((question) => question.slug === q) : -1;
-  // Only a group already saved, or any group once the member has finished, opens to be changed.
-  const editing = (edit || finished) && at >= 0 && (me.complete || saved(me, QUESTIONS[at]!.group));
-  const prev = useRef(at);
-  const from = prev.current;
-  useEffect(() => {
-    prev.current = at;
-    if (q && trail.current.at(-1) === q) trail.current.pop();
-  }, [at, q]);
+  const historyIndex = () => router.history.location.state.__TSR_index;
+  const gated = Boolean(search.gated);
+  const at = indexOf(search.q);
+  const [seen, setSeen] = useState({ at, from: at });
+  if (seen.at !== at) setSeen({ at, from: seen.at });
+  const from = seen.at === at ? seen.from : seen.at;
+  const screen = screenFor(me, draft, search, completeAtLoad, hop);
+  const editing = screen.kind === "ask" && screen.editing;
+  const backToList = screen.kind === "ask" && screen.backToList;
 
-  // While one question leaves and the next arrives, nothing on either takes a tap.
   async function leave(up: boolean) {
     moving.current = true;
     const el = box.current;
     if (!el) return;
     el.inert = true;
     if (still()) return;
-    const frames = [
-      { opacity: 1, transform: "none" },
-      { opacity: 0, transform: `translateY(${up ? -12 : 12}px)` },
-    ];
-    const timing = {
-      duration: 140,
-      easing: EXIT,
-      fill: "forwards" as const,
-    };
-    flowing()?.animate(frames, timing);
-    await el.animate(frames, timing).finished.catch(() => {});
+    const dir = up ? 1 : -1;
+    const actions = flowing();
+    if (actions) slide(actions, false, dir);
+    await slide(el, false, dir).finished.catch(() => {});
   }
 
-  // A group opened from the list stays in that group, and its last question saves and goes back to the list.
-  async function go(slug: Slug, open = editing) {
+  async function go(slug: Slug, open = editing, opened = hop?.opened) {
     if (moving.current) return;
-    if (q) trail.current.push(q);
     await leave(true);
     await navigate({
       to: "/onboarding",
       search: { q: slug, edit: open || undefined, gated: gated || undefined },
+      state: { hop: { from: search.q, opened } },
     });
   }
 
-  // The back arrow steps back through history when the question before is where the member came from.
+  // Going back through history when it holds the question before keeps browser Back and Forward in step with the arrow.
   async function back() {
     const to = QUESTIONS[at - 1]?.slug;
     if (moving.current) return;
     if (backToList) return toList(false);
     if (!to) return;
     await leave(false);
-    if (trail.current.at(-1) === to) {
-      trail.current.pop();
-      router.history.back();
-    } else {
+    if (hop?.from === to) router.history.back();
+    else {
       await navigate({
         to: "/onboarding",
         search: { q: to, edit: editing || undefined, gated: gated || undefined },
+        state: { hop: { opened: hop?.opened } },
       });
     }
   }
@@ -777,11 +696,9 @@ function Flow({
   // Back at the list, history is where it was before the group opened, so the browser's Back doesn't reopen it.
   async function toList(up: boolean) {
     if (moving.current) return;
-    trail.current = [];
     await leave(up);
-    arrive.current = { dir: up ? 1 : -1, group: QUESTIONS[at]?.group };
-    const depth = opened.current ? place() - opened.current.from : 0;
-    opened.current = null;
+    setArrival({ dir: up ? 1 : -1, group: QUESTIONS[at]?.group });
+    const depth = hop?.opened ? historyIndex() - hop.opened.listIndex : 0;
     if (depth > 0) router.history.go(-depth);
     else {
       await navigate({
@@ -792,7 +709,6 @@ function Flow({
     }
   }
 
-  // Leaving onboarding, the bar and the pinned button go with the question.
   async function finish() {
     if (editing) return toList(true);
     if (!still()) {
@@ -804,93 +720,65 @@ function Flow({
     await navigate({ to: "/hub" });
   }
 
-  const settle = useRef(() => {
+  const settle = useCallback(() => {
     moving.current = false;
-    arrive.current = null;
-  }).current;
+    setArrival(null);
+  }, []);
 
-  const firstOfGroup = at >= 0 && QUESTIONS[at - 1]?.group !== QUESTIONS[at]!.group;
-  const backToList = firstOfGroup && (editing || opened.current?.group === QUESTIONS[at]!.group);
+  const opening = (group: Group) => ({ group, listIndex: historyIndex() });
+  const firstOf = (group: Group) => QUESTIONS.find((question) => question.group === group)!.slug;
 
-  if (at < 0) {
-    if (me.complete && !edit) return <Shell>{<Navigate to="/hub" replace />}</Shell>;
-    const open = GROUPS.find((group) => !saved(me, group));
-    const start = QUESTIONS.find((question) => question.group === open)?.slug ?? "name";
-    if (GROUPS.every((group) => !saved(me, group))) {
-      return <Shell>{<Navigate to="/onboarding" search={{ q: "name" }} replace />}</Shell>;
-    }
-    return (
-      <Welcome
-        me={me}
-        gated={gated}
-        box={box}
-        enter={arrive.current}
-        settle={settle}
-        onGo={() => {
-          if (me.complete) return void leave(true).then(() => navigate({ to: "/hub" }));
-          opened.current = { group: open!, from: place() };
-          void go(start, false);
-        }}
-        onOpen={(group) => {
-          opened.current = { group, from: place() };
-          void go(QUESTIONS.find((question) => question.group === group)!.slug, true);
-        }}
-      />
-    );
+  switch (screen.kind) {
+    case "hub":
+      return <Shell>{<Navigate to="/hub" replace />}</Shell>;
+    case "redirect":
+      return <Shell>{<Navigate to="/onboarding" search={screen.search} replace />}</Shell>;
+    case "list":
+      return (
+        <Welcome
+          me={me}
+          gated={gated}
+          box={box}
+          enter={arrival}
+          settle={settle}
+          onGo={(open) => {
+            if (me.complete) return void leave(true).then(() => navigate({ to: "/hub" }));
+            void go(firstOf(open), false, opening(open));
+          }}
+          onOpen={(group) => void go(firstOf(group), true, opening(group))}
+        />
+      );
+    case "ask":
+      return (
+        <Ask
+          key={search.q}
+          me={me}
+          draft={draft}
+          set={(patch) => setDraft((d) => ({ ...d, ...patch }))}
+          at={at}
+          from={from}
+          box={box}
+          locked={() => moving.current}
+          settle={settle}
+          edit={screen.editing}
+          go={go}
+          back={at > 0 || backToList ? () => void back() : undefined}
+          backLabel={backToList ? "Back to the list" : undefined}
+          finish={() => void finish()}
+        />
+      );
   }
-
-  const question = QUESTIONS[at]!;
-  const blocked = reach(at, draft, me);
-  if (blocked !== at) {
-    return (
-      <Shell>
-        {
-          <Navigate
-            to="/onboarding"
-            search={{
-              q: QUESTIONS[blocked]!.slug,
-              edit: edit || undefined,
-              gated: gated || undefined,
-            }}
-            replace
-          />
-        }
-      </Shell>
-    );
-  }
-
-  return (
-    <Ask
-      key={question.slug}
-      me={me}
-      draft={draft}
-      set={(patch) => setDraft((d) => ({ ...d, ...patch }))}
-      at={at}
-      from={from}
-      box={box}
-      locked={() => moving.current}
-      settle={settle}
-      edit={editing}
-      go={go}
-      back={at > 0 || backToList ? () => void back() : undefined}
-      backLabel={backToList ? "Back to the list" : undefined}
-      finish={() => void finish()}
-    />
-  );
 }
 
 function Onboarding() {
-  const me = useQuery(api.members.me);
-  const answers = useQuery(api.members.myDemographics);
-  const { q, gated, edit } = Route.useSearch();
-
-  if (me === undefined || answers === undefined) {
+  const member = useMember();
+  const search = Route.useSearch();
+  if (member.status !== "ready") {
     return (
       <Shell>
         <Waiting under={false} />
       </Shell>
     );
   }
-  if (me === null) return <Shell>{<Navigate to="/sign-in" replace />}</Shell>;
-  return <Flow me={me} answers={answers} q={q} gated={Boolean(gated)} edit={Boolean(edit)} />;
+  return <Flow me={member.me} answers={member.answers} search={search} />;
 }

@@ -1,16 +1,17 @@
 import { isEmail, normalizeEmail } from "./identity";
 
-function splitRow(line: string): string[] {
-  const fields: string[] = [];
+function records(csv: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
   let field = "";
   let quoted = false;
 
-  for (let index = 0; index < line.length; index++) {
-    const character = line[index];
+  for (let index = 0; index < csv.length; index++) {
+    const character = csv[index];
     if (quoted) {
       if (character !== '"') {
         field += character;
-      } else if (line[index + 1] === '"') {
+      } else if (csv[index + 1] === '"') {
         field += '"';
         index++;
       } else {
@@ -19,15 +20,21 @@ function splitRow(line: string): string[] {
     } else if (character === '"') {
       quoted = true;
     } else if (character === ",") {
-      fields.push(field);
+      row.push(field.trim());
+      field = "";
+    } else if (character === "\n") {
+      row.push(field.trim());
+      rows.push(row);
+      row = [];
       field = "";
     } else {
       field += character;
     }
   }
 
-  fields.push(field);
-  return fields.map((value) => value.trim());
+  row.push(field.trim());
+  rows.push(row);
+  return rows;
 }
 
 function emailColumn(fields: string[]): number {
@@ -36,9 +43,9 @@ function emailColumn(fields: string[]): number {
   return campus >= 0 ? campus : lower.findIndex((name) => name.includes("email"));
 }
 
-function exportDate(lines: string[]): number | null {
-  for (const line of lines) {
-    for (const field of splitRow(line)) {
+function exportDate(rows: string[][]): number | null {
+  for (const fields of rows) {
+    for (const field of fields) {
       const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(field);
       if (match) return Date.UTC(Number(match[3]), Number(match[1]) - 1, Number(match[2]));
     }
@@ -49,23 +56,19 @@ function exportDate(lines: string[]): number | null {
 export type Roster = { exportedAt: number | null; emails: string[] };
 
 export function parseRoster(csv: string): Roster {
-  const lines = csv.split(/\r?\n/);
-  const headerIndex = lines.findIndex((line) => {
-    const fields = splitRow(line);
-    return fields.length > 2 && emailColumn(fields) >= 0;
-  });
+  const rows = records(csv);
+  const headerIndex = rows.findIndex((fields) => fields.length > 2 && emailColumn(fields) >= 0);
   if (headerIndex < 0) return { exportedAt: null, emails: [] };
 
-  const column = emailColumn(splitRow(lines[headerIndex]!));
+  const column = emailColumn(rows[headerIndex]!);
   const emails = new Set<string>();
 
-  for (const line of lines.slice(headerIndex + 1)) {
-    if (!line.trim()) continue;
-    const value = splitRow(line)[column] ?? "";
+  for (const fields of rows.slice(headerIndex + 1)) {
+    const value = fields[column] ?? "";
     if (!value || value.startsWith("(")) continue;
     const email = normalizeEmail(value);
     if (isEmail(email)) emails.add(email);
   }
 
-  return { exportedAt: exportDate(lines.slice(0, headerIndex)), emails: [...emails] };
+  return { exportedAt: exportDate(rows.slice(0, headerIndex)), emails: [...emails] };
 }

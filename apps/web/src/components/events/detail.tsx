@@ -1,5 +1,3 @@
-import { api } from "@colorstack-gt/backend/convex/_generated/api";
-import { useMutation } from "convex/react";
 import {
   type ReactNode,
   type RefObject,
@@ -10,14 +8,15 @@ import {
   useState,
 } from "react";
 
-import { APPEAR, still } from "@/lib/motion";
+import { appear, cue } from "@/lib/motion";
 
-import { TASKS } from "../onboarding/options";
+import { announce } from "../frame";
+import { TaskLink } from "../member/task-link";
 import type { ClubEvent } from "./data";
 
-// Every date and time reads in Atlanta's time, wherever the member is.
+const ATLANTA = "America/New_York";
 const format = (options: Intl.DateTimeFormatOptions) =>
-  new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", ...options });
+  new Intl.DateTimeFormat("en-US", { timeZone: ATLANTA, ...options });
 const LONG = format({ weekday: "long", month: "long", day: "numeric" });
 export const SHORT = format({ weekday: "short", month: "short", day: "numeric" });
 const MON = format({ month: "short" });
@@ -42,8 +41,7 @@ const dayNo = (t: number) =>
 export const monthOf = (t: number, now: number) =>
   YEAR.format(t) === YEAR.format(now) ? MONTH.format(t) : `${MONTH.format(t)} ${YEAR.format(t)}`;
 
-// "This" and "Next" before a weekday read differently to different people, so a day this week is named alone and the
-// week after counts its days.
+// "This" and "Next" before a weekday are ambiguous, so the copy never uses them.
 export function away(e: ClubEvent, now: number) {
   const days = dayNo(e.startsAt) - dayNo(now);
   if (days <= 0) return "Today";
@@ -97,19 +95,11 @@ function download(e: ClubEvent) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
-function announce(text: string) {
-  const status = document.getElementById("events-status");
-  if (!status) return;
-  status.textContent = "";
-  requestAnimationFrame(() => (status.textContent = text));
-}
-
 type Look = Pick<ClubEvent, "art" | "tone" | "flier">;
 
-// A flier keeps its own shape. Without one, the event's colour and sticker stand in: 4:5 in the gallery, square over
-// its details.
-export const tileShape = (e: Look) => (e.flier ? e.flier.width / e.flier.height : 0.8);
-export const stackShape = (e: Look) => (e.flier ? e.flier.width / e.flier.height : 1);
+const ratio = (e: Look, blank: number) => (e.flier ? e.flier.width / e.flier.height : blank);
+export const tileShape = (e: Look) => ratio(e, 4 / 5);
+export const stackShape = (e: Look) => ratio(e, 1);
 
 export function Picture({
   event,
@@ -129,7 +119,14 @@ export function Picture({
       style={{ width, height }}
     >
       {event.flier ? (
-        <img src={event.flier.src} width={event.flier.width} height={event.flier.height} alt="" />
+        <img
+          src={event.flier.src}
+          width={event.flier.width}
+          height={event.flier.height}
+          loading="lazy"
+          decoding="async"
+          alt=""
+        />
       ) : (
         <img src={`/assets/art/stickers/${event.art}.svg`} alt="" />
       )}
@@ -155,20 +152,22 @@ export function Zoom({ event }: { event: ClubEvent }) {
 
 export type Fit = { width: number; t: number };
 
-// The flier and its details share one width and shrink together, at one size for every event, until the tallest fits
-// its room. The type stops shrinking at 88% and the width at 72%; past both, the stack scrolls.
+const TYPE_FLOOR = 0.88;
+const WIDTH_FLOOR = 0.72;
+const STEP = 0.02;
+
 export function fitStack(probe: HTMLElement, shapes: number[], widest: number, room: number): Fit {
   let k = 1;
   for (;;) {
     const width = Math.floor(widest * k);
-    const t = Math.max(0.88, k);
+    const t = Math.max(TYPE_FLOOR, k);
     probe.style.width = `${width}px`;
     probe.style.setProperty("--t", String(t));
     const tallest = Math.max(
       ...Array.from(probe.children, (c, i) => (c as HTMLElement).offsetHeight + width / shapes[i]!),
     );
-    if (tallest <= room || k <= 0.72) return { width, t };
-    k = Math.max(0.72, k - 0.02);
+    if (tallest <= room || k <= WIDTH_FLOOR) return { width, t };
+    k = Math.max(WIDTH_FLOOR, k - STEP);
   }
 }
 
@@ -177,18 +176,16 @@ export function Details({
   now,
   next,
   eyebrow,
-  narrow,
   title,
 }: {
   event: ClubEvent;
   now: number;
   next: boolean;
   eyebrow?: boolean;
-  narrow?: boolean;
   title?: RefObject<HTMLHeadingElement | null>;
 }) {
   return (
-    <div className={narrow ? "det narrow" : "det"}>
+    <div className="det">
       {eyebrow ? (
         <span className="eyb">{next ? `Next up · ${away(event, now)}` : away(event, now)}</span>
       ) : null}
@@ -229,177 +226,119 @@ export function Details({
   );
 }
 
-const INSTAGRAM = TASKS.find((task) => task.value === "instagram")!;
-
-// With nothing planned, the way to hear about what comes next: the You page's Instagram link.
 export function Nothing() {
-  const completeTask = useMutation(api.members.completeTask);
-  const record = () => void completeTask({ task: "instagram" });
   return (
     <div className="det">
       <h2 className="ttl">Nothing on the calendar yet</h2>
       <p className="ds">New events show up here as soon as they’re posted.</p>
       <div className="follow">
-        <a
-          href={INSTAGRAM.href}
-          target="_blank"
-          rel="noreferrer"
-          onClick={record}
-          onAuxClick={(e) => e.button === 1 && record()}
-        >
-          <img src="/assets/logos/instagram.png" alt="Instagram" />
-          <b>Follow @colorstackgt</b>
-          <span>{INSTAGRAM.detail}</span>
-          <i className="ic out" aria-hidden />
-        </a>
+        <TaskLink
+          task="instagram"
+          logo="/assets/logos/instagram.png"
+          title="Follow @colorstackgt"
+        />
       </div>
     </div>
   );
 }
 
-// One button for every calendar, since members use different ones. Once one is chosen it says so for a moment, then
-// turns back; nothing remembers it.
 export function Add({ event, tile }: { event: ClubEvent; tile?: boolean }) {
-  const [open, setOpen] = useState(false);
   const [added, setAdded] = useState(false);
-  const box = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLUListElement>(null);
   const face = useRef<HTMLSpanElement>(null);
   const shown = useRef(false);
   const id = useId();
+  const anchor = `--${id}`;
 
-  // "Added" arrives, holds, then leaves more slowly than it came, as Saved does on the You page.
   useLayoutEffect(() => {
     if (!shown.current) {
       shown.current = true;
       return;
     }
     const el = face.current;
-    const reduce = still();
-    el?.animate(
-      [
-        { opacity: 0, transform: added && !reduce ? "translateX(-6px)" : "none" },
-        { opacity: 1, transform: "none" },
-      ],
-      { duration: reduce ? 120 : 200, easing: APPEAR },
-    );
-    if (!added) return;
-    const timer = setTimeout(() => {
-      const fade = el?.animate([{ opacity: 1 }, { opacity: 0 }], {
-        duration: 400,
-        easing: "ease-in",
-        fill: "forwards",
-      });
-      void (fade?.finished ?? Promise.resolve()).then(
-        () => setAdded(false),
-        () => {},
-      );
-    }, 2800);
-    return () => clearTimeout(timer);
+    if (!el) return;
+    if (added) return cue(el, () => setAdded(false));
+    appear(el, { slide: false });
   }, [added]);
 
   useEffect(() => {
-    if (!open) return;
-    const close = () => setOpen(false);
-    const outside = (e: PointerEvent) => {
-      if (!box.current?.contains(e.target as Node)) close();
-    };
+    const m = menu.current;
+    if (!m) return;
     const escape = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       e.preventDefault();
       e.stopPropagation();
-      close();
+      m.hidePopover();
       button.current?.focus();
     };
-    document.addEventListener("pointerdown", outside);
-    document.addEventListener("keydown", escape, true);
-    addEventListener("scroll", close, true);
-    addEventListener("resize", close);
-    return () => {
-      document.removeEventListener("pointerdown", outside);
-      document.removeEventListener("keydown", escape, true);
-      removeEventListener("scroll", close, true);
-      removeEventListener("resize", close);
+    const toggled = (e: ToggleEvent) => {
+      if (e.newState === "open") document.addEventListener("keydown", escape, true);
+      else document.removeEventListener("keydown", escape, true);
     };
-  }, [open]);
-
-  // The menu is fixed beside its button, so a row that scrolls sideways can't clip it. It opens upward when there
-  // isn't room below, and an opened event's bar counts as no room.
-  useLayoutEffect(() => {
-    const el = menu.current;
-    const b = button.current;
-    if (!el || !b) return;
-    const r = b.getBoundingClientRect();
-    const floor = innerHeight - (b.closest(".view") ? 96 : 8);
-    const left = Math.min(
-      Math.max(8, tile ? r.right - el.offsetWidth : r.left),
-      innerWidth - el.offsetWidth - 8,
-    );
-    el.style.left = `${left}px`;
-    el.style.top = `${r.bottom + 8 + el.offsetHeight <= floor ? r.bottom + 8 : r.top - 8 - el.offsetHeight}px`;
-  }, [open, tile]);
+    m.addEventListener("toggle", toggled);
+    return () => {
+      m.removeEventListener("toggle", toggled);
+      document.removeEventListener("keydown", escape, true);
+    };
+  }, []);
 
   const done = (where: string) => {
-    setOpen(false);
+    menu.current?.hidePopover();
     setAdded(true);
     button.current?.focus({ preventScroll: true });
-    announce(`${event.title} added to ${where}.`);
+    if (button.current) announce(button.current, `${event.title} added to ${where}.`);
   };
 
   return (
-    <div ref={box} className="add">
+    <div className="add">
       <button
         ref={button}
         type="button"
-        aria-expanded={open}
-        aria-controls={open ? id : undefined}
+        popoverTarget={id}
         aria-label={tile ? `Add ${event.title} to your calendar` : undefined}
         className={`${tile ? "ra" : "solid"}${added ? " added" : ""}`}
-        onClick={() => setOpen(!open)}
+        style={{ anchorName: anchor }}
       >
         <span ref={face} key={String(added)} className="face">
           <i className={`ic ${added ? "tick" : tile ? "add" : "cal"}`} aria-hidden />
-          {tile ? null : (
-            <span className="word">{added ? "Added to calendar" : "Add to calendar"}</span>
-          )}
+          {tile ? null : <span>{added ? "Added to calendar" : "Add to calendar"}</span>}
         </span>
       </button>
-      {open ? (
-        <ul ref={menu} id={id} className="menu">
-          <li>
-            <a
-              href={google(event)}
-              target="_blank"
-              rel="noreferrer"
-              onClick={() => done("Google Calendar")}
-            >
-              Google Calendar
-            </a>
-          </li>
-          <li>
-            <a
-              href={outlook(event)}
-              target="_blank"
-              rel="noreferrer"
-              onClick={() => done("Outlook")}
-            >
-              Outlook
-            </a>
-          </li>
-          <li>
-            <button
-              type="button"
-              onClick={() => {
-                download(event);
-                done("your calendar");
-              }}
-            >
-              Apple Calendar or other (.ics)
-            </button>
-          </li>
-        </ul>
-      ) : null}
+      <ul
+        ref={menu}
+        id={id}
+        popover="auto"
+        className={tile ? "menu end" : "menu"}
+        style={{ positionAnchor: anchor }}
+      >
+        <li>
+          <a
+            href={google(event)}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => done("Google Calendar")}
+          >
+            Google Calendar
+          </a>
+        </li>
+        <li>
+          <a href={outlook(event)} target="_blank" rel="noreferrer" onClick={() => done("Outlook")}>
+            Outlook
+          </a>
+        </li>
+        <li>
+          <button
+            type="button"
+            onClick={() => {
+              download(event);
+              done("your calendar");
+            }}
+          >
+            Apple Calendar or other (.ics)
+          </button>
+        </li>
+      </ul>
     </div>
   );
 }

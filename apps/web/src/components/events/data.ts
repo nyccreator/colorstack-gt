@@ -1,4 +1,4 @@
-export type Art =
+type Art =
   | "company"
   | "event"
   | "hangout"
@@ -8,7 +8,7 @@ export type Art =
   | "resume"
   | "study"
   | "workshop";
-export type Tone = "navy" | "navy-medium" | "campanile" | "tech-lawn" | "whistle";
+type Tone = "navy" | "navy-medium" | "campanile" | "tech-lawn" | "whistle";
 
 export type ClubEvent = {
   id: string;
@@ -23,5 +23,4 @@ export type ClubEvent = {
   link?: { label: "RSVP" | "Register"; href: string };
 };
 
-// There is no source of events yet, so the page shows its empty state.
 export const EVENTS: readonly ClubEvent[] = [];

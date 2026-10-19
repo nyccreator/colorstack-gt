@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
 
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   internalMutation,
   mutation,
@@ -10,7 +10,9 @@ import {
 } from "./_generated/server";
 import { authComponent } from "./auth";
 import { TEXT_MAX_LENGTH } from "./lib/config";
+import { soleRace } from "./lib/demographics";
 import { isGraduationYearAllowed } from "./lib/graduation";
+import { isComplete, savedGroups, stepOf } from "./lib/groups";
 import {
   personalEmailError,
   isPhone,
@@ -19,17 +21,19 @@ import {
   type ProfileSite,
   profileUrl,
 } from "./lib/identity";
+import { MESSAGES } from "./lib/messages";
 import {
   contactFields,
   demographicAnswers,
+  groupFlags,
   interestFields,
   materialsFields,
+  memberGroups,
   nameFields,
+  optionalGroup,
   studiesFields,
   task,
 } from "./schema";
-
-const skippable = v.union(v.literal(4), v.literal(5));
 
 function findMember(ctx: QueryCtx, userId: string) {
   return ctx.db
@@ -45,21 +49,21 @@ function findDemographics(ctx: QueryCtx, memberId: Id<"members">) {
     .unique();
 }
 
-async function ownRow(ctx: MutationCtx) {
+async function ownRow(ctx: MutationCtx): Promise<Doc<"members">> {
   const user = await authComponent.safeGetAuthUser(ctx);
-  if (!user) throw new ConvexError("Sign in to continue.");
+  if (!user) throw new ConvexError(MESSAGES.signIn);
 
   const existing = await findMember(ctx, user._id);
-  if (existing) return { user, member: existing };
+  if (existing) return existing;
 
   const id = await ctx.db.insert("members", { userId: user._id, step: 0, tasksDone: [] });
-  return { user, member: (await ctx.db.get(id))! };
+  return (await ctx.db.get(id))!;
 }
 
 function withinLimit(args: Record<string, unknown>) {
   for (const value of Object.values(args)) {
     if (typeof value === "string" && value.length > TEXT_MAX_LENGTH) {
-      throw new ConvexError(`Keep each answer under ${TEXT_MAX_LENGTH} characters.`);
+      throw new ConvexError(MESSAGES.tooLong);
     }
   }
 }
@@ -78,15 +82,9 @@ function profileLink(site: ProfileSite, value = ""): string | undefined {
 
 const profile = v.object({
   gtEmail: v.string(),
-  step: v.number(),
-  name: v.optional(v.object(nameFields)),
-  contact: v.optional(v.object(contactFields)),
-  studies: v.optional(v.object(studiesFields)),
-  materials: v.optional(v.object(materialsFields)),
-  interests: v.optional(v.object(interestFields)),
+  ...memberGroups,
   resume: v.optional(v.object({ name: v.string(), size: v.number() })),
-  tasksDone: v.array(task),
-  reported: v.boolean(),
+  saved: groupFlags,
   onRoster: v.boolean(),
   complete: v.boolean(),
   joinedAt: v.optional(v.number()),
@@ -107,20 +105,19 @@ export const me = query({
         .query("roster")
         .withIndex("by_email", (q) => q.eq("email", gtEmail))
         .first()) !== null;
+    const saved = savedGroups(member, reported);
 
     return {
       gtEmail,
-      step: member?.step ?? 0,
       name: member?.name,
       contact: member?.contact,
       studies: member?.studies,
       materials: member?.materials,
       interests: member?.interests,
       resume: member?.resume && { name: member.resume.name, size: member.resume.size },
-      tasksDone: member?.tasksDone ?? [],
-      reported,
+      saved,
       onRoster,
-      complete: Boolean(member?.name && member.contact && member.studies && reported),
+      complete: isComplete(saved),
       joinedAt: member?._creationTime,
     };
   },
@@ -160,12 +157,12 @@ export const saveName = mutation({
   handler: async (ctx, args) => {
     withinLimit(args);
     const name = {
-      firstName: required(args.firstName, "Enter your first name."),
-      lastName: required(args.lastName, "Enter your last name."),
-      pronouns: required(args.pronouns, "Choose your pronouns."),
+      firstName: required(args.firstName, MESSAGES.firstName),
+      lastName: required(args.lastName, MESSAGES.lastName),
+      pronouns: required(args.pronouns, MESSAGES.pronouns),
     };
-    const { member } = await ownRow(ctx);
-    await ctx.db.patch(member._id, { name, step: Math.max(member.step, 1) });
+    const member = await ownRow(ctx);
+    await ctx.db.patch(member._id, { name, step: Math.max(member.step, stepOf("name")) });
     return null;
   },
 });
@@ -175,16 +172,16 @@ export const saveContact = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     withinLimit(args);
-    const { member } = await ownRow(ctx);
+    const member = await ownRow(ctx);
     const personalEmail = normalizeEmail(args.personalEmail);
 
     const emailError = personalEmailError(personalEmail);
     if (emailError) throw new ConvexError(emailError);
-    if (!isPhone(args.phone)) throw new ConvexError("Enter a valid phone number.");
+    if (!isPhone(args.phone)) throw new ConvexError(MESSAGES.phone);
 
     await ctx.db.patch(member._id, {
       contact: { personalEmail, phone: args.phone.trim() },
-      step: Math.max(member.step, 2),
+      step: Math.max(member.step, stepOf("contact")),
     });
     return null;
   },
@@ -195,15 +192,15 @@ export const saveStudies = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     withinLimit(args);
-    const major = required(args.major, "Choose your major.");
+    const major = required(args.major, MESSAGES.major);
     if (!isGraduationYearAllowed(args.graduationYear)) {
-      throw new ConvexError("Choose a graduation year within four years of today.");
+      throw new ConvexError(MESSAGES.year);
     }
 
-    const { member } = await ownRow(ctx);
+    const member = await ownRow(ctx);
     await ctx.db.patch(member._id, {
       studies: { ...args, major, minor: args.minor?.trim() || undefined },
-      step: Math.max(member.step, 3),
+      step: Math.max(member.step, stepOf("studies")),
     });
     return null;
   },
@@ -217,14 +214,14 @@ export const saveMaterials = mutation({
     const linkedin = profileLink("linkedin", args.linkedin);
     const github = profileLink("github", args.github);
 
-    const { member } = await ownRow(ctx);
+    const member = await ownRow(ctx);
     if (args.resumeBook && !member.resume) {
-      throw new ConvexError("Upload a resume to join the resume book.");
+      throw new ConvexError(MESSAGES.resumeBook);
     }
 
     await ctx.db.patch(member._id, {
       materials: { linkedin, github, resumeBook: args.resumeBook },
-      step: Math.max(member.step, 4),
+      step: Math.max(member.step, stepOf("materials")),
     });
     return null;
   },
@@ -234,21 +231,17 @@ export const saveDemographics = mutation({
   args: demographicAnswers,
   returns: v.null(),
   handler: async (ctx, args) => {
-    if (args.raceEthnicity.length === 0) {
-      throw new ConvexError("Choose at least one answer for race and ethnicity.");
-    }
-    const raceEthnicity = args.raceEthnicity.includes("prefer_not_to_answer")
-      ? ["prefer_not_to_answer" as const]
-      : [...new Set(args.raceEthnicity)];
+    if (args.raceEthnicity.length === 0) throw new ConvexError(MESSAGES.race);
+    const raceEthnicity = soleRace(args.raceEthnicity);
 
-    const { member } = await ownRow(ctx);
+    const member = await ownRow(ctx);
     const answers = { ...args, raceEthnicity, memberId: member._id };
     const existing = await findDemographics(ctx, member._id);
 
     if (existing) await ctx.db.replace(existing._id, answers);
     else await ctx.db.insert("demographics", answers);
 
-    await ctx.db.patch(member._id, { step: Math.max(member.step, 6) });
+    await ctx.db.patch(member._id, { step: Math.max(member.step, stepOf("background")) });
     return null;
   },
 });
@@ -257,13 +250,13 @@ export const saveInterests = mutation({
   args: interestFields,
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { member } = await ownRow(ctx);
+    const member = await ownRow(ctx);
     await ctx.db.patch(member._id, {
       interests: {
         lookingFor: [...new Set(args.lookingFor)],
         hobbies: [...new Set(args.hobbies)],
       },
-      step: Math.max(member.step, 5),
+      step: Math.max(member.step, stepOf("interests")),
     });
     return null;
   },
@@ -273,7 +266,7 @@ export const removeResume = mutation({
   args: {},
   returns: v.null(),
   handler: async (ctx) => {
-    const { member } = await ownRow(ctx);
+    const member = await ownRow(ctx);
     if (!member.resume) return null;
 
     await ctx.storage.delete(member.resume.storageId);
@@ -286,11 +279,11 @@ export const removeResume = mutation({
 });
 
 export const skip = mutation({
-  args: { step: skippable },
+  args: { group: optionalGroup },
   returns: v.null(),
-  handler: async (ctx, { step }) => {
-    const { member } = await ownRow(ctx);
-    await ctx.db.patch(member._id, { step: Math.max(member.step, step) });
+  handler: async (ctx, { group }) => {
+    const member = await ownRow(ctx);
+    await ctx.db.patch(member._id, { step: Math.max(member.step, stepOf(group)) });
     return null;
   },
 });
@@ -299,7 +292,7 @@ export const completeTask = mutation({
   args: { task },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { member } = await ownRow(ctx);
+    const member = await ownRow(ctx);
     if (!member.tasksDone.includes(args.task)) {
       await ctx.db.patch(member._id, { tasksDone: [...member.tasksDone, args.task] });
     }

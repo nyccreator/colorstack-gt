@@ -1,109 +1,132 @@
-import { ConvexError } from "convex/values";
+import { type Group, GROUPS } from "@colorstack-gt/backend/convex/lib/groups";
+import { MESSAGES } from "@colorstack-gt/backend/convex/lib/messages";
+import { flushSync } from "react-dom";
 
-import { APPEAR, BUSY_AFTER, MOVE, still } from "@/lib/motion";
+import { APPEAR, BUSY_AFTER, cue, MOVE, still } from "@/lib/motion";
 
-export type Gid = "who" | "contact" | "studies" | "career" | "interests" | "background";
-export type Eid = Exclude<Gid, "career"> | "res" | "lnk";
-export type Value = string | string[];
-export type Draft = Record<string, Value>;
-export type Row = { key: string; label: string; value: string; fixed?: boolean };
-type Next = { gid: Gid; key: string };
+import { announce as say } from "../frame";
+import {
+  type Draft,
+  type Field,
+  FIELDS,
+  errorsFor,
+  failureText,
+  setField,
+  toggleField,
+  type Upload,
+} from "../member/draft";
+import { type Editor, GROUP_OF, TITLES } from "../member/groups";
+
+type Resume = { name: string; size: number };
+export type Row = { key: string; label: string; value: string; fixed?: boolean; editor: Editor };
+type Next = { group: Group; key: string };
 
 export type EditorDef = {
-  focus: Record<string, string>;
-  draft: () => Draft;
-  check: (d: Draft) => Record<string, string>;
-  change?: (k: string, d: Draft, prev: Value | undefined) => string | void;
-  toggle?: (k: string, v: string, d: Draft) => void;
+  focus: Partial<Record<string, string>>;
+  fields: readonly Field[];
+  change?: (k: Field, d: Draft, prev: Draft) => { patch?: Partial<Draft>; focus?: string } | void;
   chips?: boolean;
   instant?: boolean;
 };
 
 export type Ed = {
-  gid: Gid;
+  group: Group;
+  editor: Editor;
   key: string;
-  eid: Eid;
   sec: HTMLElement;
   draft: Draft;
-  base: string;
+  base: Draft;
   before: Row[];
   shown: Set<string>;
   asking: boolean;
   error: string | null;
   busy: boolean;
   saving: boolean;
-  labelAt: number;
   last: HTMLElement | null;
   next: Next | null;
-  after: Next | null;
   target: HTMLElement | null;
   y0: number;
   moved: boolean;
-  free: boolean;
+  userScrolled: boolean;
 };
 
 export type Res = {
   confirm: boolean;
   busy: "upload" | "remove" | null;
   error: string | null;
+  uploaded: Resume | null;
   book: "in" | "out" | null;
   bookLabel: "saving" | "saved" | null;
   bookError: string | null;
 };
 
 export type Deps = {
-  commit: () => void;
-  title: (gid: Gid) => string;
-  rows: (gid: Gid) => Row[];
-  editors: Record<Eid, EditorDef>;
-  save: (eid: Eid, d: Draft) => Promise<unknown>;
+  rows: (group: Group) => Row[];
+  editors: Record<Editor, EditorDef>;
+  draft: () => Draft;
+  save: (editor: Editor, d: Draft) => Promise<unknown>;
   setBook: (on: boolean) => Promise<unknown>;
-  upload: (file: File) => Promise<string | null>;
+  upload: (file: File) => Promise<Upload>;
   removeResume: () => Promise<unknown>;
-  hasResume: () => boolean;
+  resume: () => Resume | undefined;
   inBook: () => boolean;
 };
+
+type Snapshot = { ed: Ed | null; res: Res; lastOpen: Group };
 
 type Plan = {
   top?: number | null;
   closing?: boolean;
-  dur?: number;
   pin?: Pin;
   solid?: Element | null;
-  after?: (dur: number, clips: Map<Element, number>) => void;
-  enter?: Element[] | (() => Element[]);
+  order?: (i: number) => number;
+  enter?: Element[];
 };
-type Pin = { sec: HTMLElement; el: Element; mid: boolean; from: number; delta?: number };
+type Pin = { sec: HTMLElement; el: Element; by: "center" | "top"; from: number; delta?: number };
 
 const ZONE_TOP = 16;
+const RING_ROOM = 8;
+const LABEL_HOLD = 400;
 const SCROLL_KEYS = new Set([" ", "PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown"]);
 const VISIBLE = "you-visible";
-const FAILED = "We couldn't save that. Check your connection and try again.";
+const ALL_FIELDS = new Set<string>(Object.values(FIELDS).flat());
+const isField = (k: string): k is Field => ALL_FIELDS.has(k);
+const isGroup = (id: string): id is Group => (GROUPS as readonly string[]).includes(id);
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// MOVE as a function, for the page's own scroll, which no CSS easing can drive.
-const glideCurve = (x: number) => {
+function slowLabel(show: () => void) {
+  let shownAt = 0;
+  const timer = setTimeout(() => {
+    shownAt = performance.now();
+    show();
+  }, BUSY_AFTER);
+  return () => {
+    clearTimeout(timer);
+    return shownAt ? sleep(shownAt + LABEL_HOLD - performance.now()) : null;
+  };
+}
+
+const [x1, y1, x2, y2] = MOVE.match(/[\d.]+/g)!.map(Number) as [number, number, number, number];
+const moveEase = (x: number) => {
   const at = (t: number, p1: number, p2: number) =>
     3 * p1 * t * (1 - t) ** 2 + 3 * p2 * t * t * (1 - t) + t ** 3;
   let lo = 0;
   let hi = 1;
   for (let i = 0; i < 24; i++) {
     const mid = (lo + hi) / 2;
-    if (at(mid, 0.32, 0) < x) lo = mid;
+    if (at(mid, x1, x2) < x) lo = mid;
     else hi = mid;
   }
-  return at((lo + hi) / 2, 0.72, 1);
+  return at((lo + hi) / 2, y1, y2);
 };
-// Answers compare as sets, so turning one off and on again isn't a change.
-const flat = (v: Value | undefined) => JSON.stringify(Array.isArray(v) ? [...v].sort() : v);
-const snap = (d: Draft) => JSON.stringify(Object.entries(d).map(([k, v]) => [k, flat(v)]));
-const message = (failure: unknown) =>
-  failure instanceof ConvexError ? String(failure.data) : FAILED;
+const unordered = (v: Draft[Field]) => JSON.stringify(Array.isArray(v) ? [...v].sort() : v);
+const same = (a: Draft, b: Draft, k: Field) => unordered(a[k]) === unordered(b[k]);
 
 export type Editing = ReturnType<typeof createEditing>;
 
-export function createEditing(root: HTMLElement, deps: Deps) {
+export function createEditing(deps: Deps) {
+  let root: HTMLElement;
   const $ = <T extends Element = HTMLElement>(s: string, el: ParentNode = root) =>
     el.querySelector<T>(s);
   const $$ = <T extends Element = HTMLElement>(s: string, el: ParentNode = root) => [
@@ -111,18 +134,28 @@ export function createEditing(root: HTMLElement, deps: Deps) {
   ];
   const coarse = matchMedia("(pointer: coarse)").matches;
   const reduce = still;
-  const { commit, editors } = deps;
+  const { editors } = deps;
+
+  let version = 0;
+  const listeners = new Set<() => void>();
+  // Rendering inside flushSync lets a close fold the mutation's new rows into the same commit as the editor leaving.
+  const emit = () => {
+    version++;
+    flushSync(() => listeners.forEach((fn) => fn()));
+  };
 
   let ed: Ed | null = null;
+  let lastOpen: Group = "name";
   const res: Res = {
     confirm: false,
     busy: null,
     error: null,
+    uploaded: null,
     book: null,
     bookLabel: null,
     bookError: null,
   };
-  const E = (e: Ed) => editors[e.eid];
+  const E = (e: Ed) => editors[e.editor];
   const form = () => $<HTMLFormElement>("form", ed!.sec)!;
   const act = () => $(".act", form())!;
 
@@ -153,7 +186,7 @@ export function createEditing(root: HTMLElement, deps: Deps) {
       y: r.bottom - $(".gp", sec)!.getBoundingClientRect().top,
     };
   };
-  // A ghost copies what is on screen now, mid-fade included, so turning around never flashes.
+  // Animated elements copy their current opacity and transform, so a change mid-fade doesn't flash.
   function snapshot(el: Element, blank: Element | null | undefined) {
     const c = el.cloneNode(true) as Element;
     const src = [el, ...el.querySelectorAll("*")];
@@ -170,18 +203,15 @@ export function createEditing(root: HTMLElement, deps: Deps) {
     return c;
   }
 
-  // Every block keeps its on-screen place for the first frame, then glides to where the change put it.
   function choreograph(
     change: () => Plan | void,
     {
       swap = [],
       track = [],
-      enterOrder,
       blank,
     }: {
       swap?: Element[];
       track?: Element[];
-      enterOrder?: (el: Element, i: number) => number;
       blank?: Element | null;
     } = {},
   ) {
@@ -204,14 +234,12 @@ export function createEditing(root: HTMLElement, deps: Deps) {
     running = [];
     $$(".ghost").forEach((g) => g.remove());
     const plan: Plan = change() ?? {};
-    const dur = reduce() ? 0 : (plan.dur ?? (plan.closing ? t.close : t.open));
+    const dur = reduce() ? 0 : plan.closing ? t.close : t.open;
     const moved = new Map<Element, number>();
     const pin = plan.pin;
-    const clips = new Map<Element, number>();
     for (const el of blocks) {
       if (!el.isConnected) continue;
       let dy = first.get(el)! - anchor(el);
-      // The tapped row and its field are one thing: the group glides so that it never jumps.
       if (pin && el === pin.sec) {
         const d = pin.from - pinY(pin);
         pin.delta = dy - d;
@@ -227,7 +255,7 @@ export function createEditing(root: HTMLElement, deps: Deps) {
         });
       }
     }
-    // The group label grows into the editor's heading and shrinks back; its line travels with the text.
+    // The heading's row moves and only the heading scales, so the pinned row's fade travels with the text.
     for (const h of heads) {
       const now = headBox(h.sec);
       const k = h.w / now.w;
@@ -249,6 +277,7 @@ export function createEditing(root: HTMLElement, deps: Deps) {
     }
     for (const g of ghosts) {
       const gp = $(".gp", g.sec)!;
+      const act = $(".act", g.sec);
       const h = gp.getBoundingClientRect().height;
       const ghost = document.createElement("div");
       ghost.className = "ghost";
@@ -268,20 +297,30 @@ export function createEditing(root: HTMLElement, deps: Deps) {
         () => ghost.remove(),
         () => {},
       );
-      // The panel's edges travel with the content around it, kept 8px clear so a field's focus ring is never cut.
       const top = Math.max(0, d);
       const bot = Math.max(0, h - d - g.h);
       if (dur && (top || bot)) {
         anim(
           gp,
           [
-            { clipPath: `inset(${top}px -8px ${bot}px -8px round 24px)` },
-            { clipPath: "inset(0 -8px 0 -8px round 0)" },
+            { clipPath: `inset(${top}px -${RING_ROOM}px ${bot}px -${RING_ROOM}px round 24px)` },
+            { clipPath: `inset(0 -${RING_ROOM}px 0 -${RING_ROOM}px round 0)` },
           ],
           { duration: dur, easing: MOVE },
         );
       }
-      clips.set(g.sec, gp.getBoundingClientRect().top + h - bot);
+      const clipBottom = gp.getBoundingClientRect().top + h - bot;
+      const saveBottom = act?.getBoundingClientRect().bottom ?? 0;
+      if (dur && act && saveBottom > clipBottom) {
+        anim(
+          act,
+          [{ transform: `translateY(${clipBottom - saveBottom}px)` }, { transform: "none" }],
+          {
+            duration: dur,
+            easing: MOVE,
+          },
+        );
+      }
       const gTop = Math.max(0, -d);
       const gBot = Math.max(0, g.h + d - h);
       if (dur && (gTop || gBot)) {
@@ -292,12 +331,10 @@ export function createEditing(root: HTMLElement, deps: Deps) {
         );
       }
     }
-    plan.after?.(dur, clips);
-    const enter = typeof plan.enter === "function" ? plan.enter() : (plan.enter ?? []);
-    enter.forEach((el, i) => {
+    (plan.enter ?? []).forEach((el, i) => {
       const o = {
         duration: t.fadeIn,
-        delay: (reduce() ? 0 : 30) + Math.min(enterOrder ? enterOrder(el, i) : i, 4) * t.stagger,
+        delay: (reduce() ? 0 : 30) + Math.min(plan.order?.(i) ?? i, 4) * t.stagger,
         easing: APPEAR,
       };
       if (el !== plan.solid) {
@@ -313,12 +350,12 @@ export function createEditing(root: HTMLElement, deps: Deps) {
           o,
         );
       }
-      // The focused field is never transparent, or WebKit hides its caret; only its label fades in.
+      // Only the label fades in, because WebKit hides the caret of a field that is fading.
       const k = $(":scope > .k", el);
       if (k) anim(k, [{ opacity: 0 }, { opacity: 1 }], o);
     });
-    // The page's own scroll moves on the same curve rather than jumping: iOS shows a scroll set from script a
-    // frame before it shows the transforms meant to hide it.
+    // The scroll glides on the transforms' curve because iOS paints a script scroll a frame before the transforms
+    // that hide it.
     if (plan.top != null) glideTo(plan.top, dur);
     const gen = ++generation;
     Promise.allSettled(running.map((a) => a.finished)).then(() => {
@@ -327,20 +364,17 @@ export function createEditing(root: HTMLElement, deps: Deps) {
     return plan;
   }
 
-  // A row and its field line up on the value, so the text stays put and the field grows around it.
-  const mid = (el: Element) => {
+  const centerY = (el: Element) => {
     const r = el.getBoundingClientRect();
     return r.top + r.height / 2;
   };
   const control = (block: Element) => $("input:not([type=file]), select", block);
-  const pinY = (p: Pin) => (p.mid ? mid(p.el) : p.el.getBoundingClientRect().top);
+  const pinY = (p: Pin) => (p.by === "center" ? centerY(p.el) : p.el.getBoundingClientRect().top);
 
-  // iOS reports element positions from the top of the visible area but anchors sticky and fixed elements to a
-  // taller layout area that it slides around, so the keyboard code measures against the visible area itself.
   const typing = () =>
     coarse && !!document.activeElement?.matches("input:not([type=file]):not([readonly])");
-  // A fixed probe marks the layout area's top; adding the viewport's own offset finds the visible area's top in
-  // the coordinates element positions use, on iOS and Android alike.
+  // iOS slides fixed elements with the keyboard, so a fixed probe plus visualViewport.offsetTop finds the visible
+  // top in the coordinates rects use.
   const probe = document.createElement("i");
   probe.style.cssText =
     "position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none";
@@ -351,33 +385,32 @@ export function createEditing(root: HTMLElement, deps: Deps) {
     return { top, bottom: top + height, height };
   };
   const keyboardUp = () => typing() && view().height < innerHeight - 80;
-  // Where the bar stays over the page, a group is only in view below it.
-  const under = () => {
+  const fixedBarHeight = () => {
     const b = $(".bar");
     return b && getComputedStyle(b).position === "fixed" ? b.offsetHeight : 0;
   };
 
-  // The visible height above each kind of keyboard, as this device last reported it. Safari's toolbar changes the
-  // window's height but not this, so it holds whichever way the toolbar is.
-  let seen: Record<string, number> = {};
+  // Safari's toolbar changes innerHeight but not the visible height above a keyboard, so that height is what's
+  // remembered.
+  let visibleAbove: Record<string, number> = {};
   try {
-    seen = JSON.parse(localStorage.getItem(VISIBLE) ?? "{}") ?? {};
+    visibleAbove = JSON.parse(localStorage.getItem(VISIBLE) ?? "{}") ?? {};
   } catch {}
   const kindOf = (el: Element | null) =>
     `${el?.matches("[type=tel], [inputmode=numeric], [inputmode=decimal]") ? "num" : "text"}:${innerWidth > innerHeight ? "l" : "p"}`;
   const visibleWith = (el: Element) =>
-    seen[kindOf(el)] ?? Math.round((innerWidth > innerHeight ? innerHeight : screen.height) * 0.45);
+    visibleAbove[kindOf(el)] ??
+    Math.round((innerWidth > innerHeight ? innerHeight : screen.height) * 0.45);
   function measure() {
     const vv = visualViewport;
     if (!vv || !keyboardUp() || Math.abs(vv.scale - 1) > 0.01) return;
-    seen[kindOf(document.activeElement)] = Math.round(vv.height);
+    visibleAbove[kindOf(document.activeElement)] = Math.round(vv.height);
     try {
-      localStorage.setItem(VISIBLE, JSON.stringify(seen));
+      localStorage.setItem(VISIBLE, JSON.stringify(visibleAbove));
     } catch {}
   }
 
-  // The page's own scroll. A phone runs its own smooth scroll off the page's main work, so a keyboard opening
-  // can't stall it; elsewhere it moves on MOVE. A touch hands the page back to the member at once.
+  // Phones scroll natively because a script-driven scroll stalls while the keyboard opens.
   let glide = 0;
   function glideTo(top: number, dur: number) {
     cancelAnimationFrame(glide);
@@ -391,22 +424,20 @@ export function createEditing(root: HTMLElement, deps: Deps) {
     const start = performance.now();
     const step = (now: number) => {
       const p = Math.min(1, Math.max(0, (now - start) / dur));
-      window.scrollTo(0, from + (top - from) * glideCurve(p));
+      window.scrollTo(0, from + (top - from) * moveEase(p));
       if (p < 1) glide = requestAnimationFrame(step);
     };
     glide = requestAnimationFrame(step);
   }
   const stopGlide = () => cancelAnimationFrame(glide);
-  // Once the member drags or scrolls the page, it is theirs: nothing corrects it and closing leaves it there.
-  const released = () => {
+  const userScrolls = () => {
     stopGlide();
-    if (ed) ed.free = true;
+    if (ed) ed.userScrolled = true;
     checkBack();
   };
 
-  // iOS opens the keyboard only for a focus inside the tap, and then reveals that field itself, undoing any scroll
-  // made since. So the tap focuses a stand-in at the top of the visible area, which needs no revealing, and focus
-  // moves to the real field once the page has brought it into view; the keyboard stays up throughout.
+  // iOS opens the keyboard only for a focus inside the tap and then scrolls that field into view itself, so the tap
+  // focuses a stand-in and focus moves to the real field after the glide.
   const standIn = document.createElement("input");
   standIn.tabIndex = -1;
   standIn.setAttribute("aria-hidden", "true");
@@ -432,52 +463,50 @@ export function createEditing(root: HTMLElement, deps: Deps) {
     }, dur);
   }
 
-  // The zone a field sits in: under the pinned title on phones, which unpins while the keyboard is up, and above the
-  // keyboard, or above where a keyboard still to come will reach.
-  const titleH = (kb = false) =>
-    narrow() && !kb && !typing() ? ($(".grp.open .gh")?.offsetHeight ?? 0) : 0;
+  // The heading's height counts only while you.css has it sticky, which a phone keyboard undoes.
+  const titleH = (kb = false) => {
+    const gh = $(".grp.open .gh");
+    return gh && !kb && getComputedStyle(gh).position === "sticky" ? gh.offsetHeight : 0;
+  };
   type Zone = { top: number; bottom: number; edge: number };
   const zone = (focusEl?: Element, kb = false): Zone => {
     const v = view();
-    const coming = kb && focusEl && v.height >= innerHeight - 80;
-    const bottom = coming ? v.top + visibleWith(focusEl) : v.bottom;
-    const edge = v.top + under();
+    const keyboardComing = kb && focusEl && v.height >= innerHeight - 80;
+    const bottom = keyboardComing ? v.top + visibleWith(focusEl) : v.bottom;
+    const edge = v.top + fixedBarHeight();
     return { top: edge + ZONE_TOP + titleH(kb), bottom: bottom - (narrow() ? 8 : 24), edge };
   };
-  // The scroll an open editor needs: the field with Save under it when both fit in the zone, otherwise the field
-  // alone, staying nearest `want` and never pushing an on-screen heading off when a smaller scroll would do. The
-  // first field brings whatever sits above it in the form, such as the privacy note.
+  const toScroll = (d: number) => (Math.abs(d) < 1 ? null : scrollY + d);
+  const reveal = (topRoom: number, bottomOverflow: number) =>
+    toScroll(
+      bottomOverflow <= topRoom ? Math.min(Math.max(0, bottomOverflow), topRoom) : bottomOverflow,
+    );
   function scrollFor(f: HTMLElement, block: Element, z: Zone, want = 0) {
-    const r = block.getBoundingClientRect();
-    const head = f.closest(".grp")!.getBoundingClientRect().top - z.edge;
-    const hi = (block === $(".f", f) ? f : block).getBoundingClientRect().top - z.top;
-    let lo = f.parentElement!.getBoundingClientRect().bottom - z.bottom;
-    if (lo > hi) lo = r.bottom - z.bottom;
-    if (lo > hi) return hi;
-    const cap = head >= ZONE_TOP ? Math.min(hi, head - ZONE_TOP) : hi;
-    return Math.min(Math.max(want, lo), cap >= lo ? cap : hi);
+    const first = block === $(".f", f);
+    const toField = (first ? f : block).getBoundingClientRect().top - z.top;
+    const toSave = f.parentElement!.getBoundingClientRect().bottom - z.bottom;
+    const least = toSave <= toField ? toSave : block.getBoundingClientRect().bottom - z.bottom;
+    if (least > toField) return toField;
+    const toHeading = f.closest(".grp")!.getBoundingClientRect().top - z.edge;
+    const most = toHeading >= ZONE_TOP ? Math.min(toField, toHeading - ZONE_TOP) : toField;
+    return Math.min(Math.max(want, least), most >= least ? most : toField);
   }
   function targetFor(e: Ed, focusEl: Element, kb: boolean, pin?: Pin) {
     const f = $<HTMLFormElement>("form", e.sec)!;
-    const block = focusEl.closest(".f") ?? $(".f", f)!;
     const z = zone(focusEl, kb);
-    const head = e.sec.getBoundingClientRect().top;
-    const fr = f.getBoundingClientRect();
-    const top = z.edge + ZONE_TOP;
-    // Chip editors on phones open with the whole group in view when it fits, or else the form's top under the title,
-    // even when the form runs on below the screen.
-    const d =
-      narrow() && !kb && E(e).chips && fr.bottom - head <= z.bottom - top
-        ? head - top
-        : narrow() && !kb && E(e).chips
-          ? fr.top - z.top
-          : scrollFor(f, block, z, pin ? pinY(pin) - pin.from : 0);
-    return Math.abs(d) < 1 ? null : scrollY + d;
+    if (narrow() && !kb && E(e).chips) {
+      const head = e.sec.getBoundingClientRect().top;
+      const fr = f.getBoundingClientRect();
+      const top = z.edge + ZONE_TOP;
+      const groupFits = fr.bottom - head <= z.bottom - top;
+      return toScroll(groupFits ? head - top : fr.top - z.top);
+    }
+    const block = focusEl.closest(".f") ?? $(".f", f)!;
+    return toScroll(scrollFor(f, block, z, pin ? pinY(pin) - pin.from : 0));
   }
 
-  // Once the keyboard has landed or the screen has turned: if the field or Save is out of view, one short glide.
-  function settled() {
-    if (!ed || ed.free) return;
+  function refit() {
+    if (!ed || ed.userScrolled) return;
     const e = ed;
     const f = form();
     const el = f.contains(document.activeElement) ? document.activeElement : e.target;
@@ -493,21 +522,21 @@ export function createEditing(root: HTMLElement, deps: Deps) {
     glideTo(to, reduce() ? 0 : 200);
     e.moved = Math.abs(to - e.y0) > 8;
   }
-  // Only the keyboard arriving, changing height or the screen turning places the field again. Safari's toolbar
-  // also resizes the window while the member scrolls, and that must never pull the page.
+  // Safari's toolbar resizes the window as the member scrolls, so only a turn or a new keyboard height may move the
+  // page.
   let vvWait = 0;
-  let size = `${innerWidth}x${innerHeight}`;
+  let width = innerWidth;
   let keyboardAt: number | null = null;
   const resized = () => {
     clearTimeout(vvWait);
     vvWait = window.setTimeout(() => {
-      const turned = innerWidth !== Number(size.split("x")[0]);
-      size = `${innerWidth}x${innerHeight}`;
+      const turned = innerWidth !== width;
+      width = innerWidth;
       const at = keyboardUp() ? Math.round(view().height) : null;
       if (!turned && at === keyboardAt) return;
       keyboardAt = at;
       measure();
-      if (turned || at !== null) settled();
+      if (turned || at !== null) refit();
     }, 150);
   };
 
@@ -516,7 +545,7 @@ export function createEditing(root: HTMLElement, deps: Deps) {
   const pill = () => $<HTMLButtonElement>(".back");
   function placeBack(b: HTMLElement) {
     const vv = visualViewport;
-    // fixed elements sit in the layout area iOS slides under the keyboard, so above it the pill is placed by hand
+    // iOS slides fixed elements behind the keyboard, so while it is up the pill is placed from the visual viewport.
     if (vv && keyboardUp()) {
       b.style.top = `${vv.offsetTop + vv.height - b.offsetHeight - 12}px`;
       b.style.bottom = "auto";
@@ -524,15 +553,12 @@ export function createEditing(root: HTMLElement, deps: Deps) {
       b.style.top = "";
       b.style.bottom = "";
     }
-    const column = $(".groups")!.getBoundingClientRect();
-    b.style.left = `${column.left + column.width / 2}px`;
   }
   let backWait = 0;
   function showBack(on: boolean) {
     clearTimeout(backWait);
     const b = pill();
     if (!b) return;
-    root.classList.toggle("backing", on);
     if (!on) return b.removeAttribute("data-on");
     placeBack(b);
     b.setAttribute("data-on", "");
@@ -542,20 +568,20 @@ export function createEditing(root: HTMLElement, deps: Deps) {
     backFrame = requestAnimationFrame(() => {
       const b = pill();
       if (!b) return;
-      if (!ed || !ed.free) return showBack(false);
+      if (!ed || !ed.userScrolled) return showBack(false);
       const v = view();
       const r = ed.sec.getBoundingClientRect();
-      const seen = Math.min(r.bottom, v.bottom) - Math.max(r.top, v.top + under());
+      const seen = Math.min(r.bottom, v.bottom) - Math.max(r.top, v.top + fixedBarHeight());
       const on = b.hasAttribute("data-on");
       b.dataset.dir = r.top >= v.bottom ? "down" : "up";
-      // it waits a moment off screen, so a fling past the group doesn't pop it in and out
+      // The pill waits a moment so a fling past the group doesn't flash it.
       if (!on && seen <= 0) {
         if (!backWait) {
           backWait = window.setTimeout(() => {
             backWait = 0;
-            const g = ed?.free ? ed.sec.getBoundingClientRect() : null;
+            const g = ed?.userScrolled ? ed.sec.getBoundingClientRect() : null;
             const w = view();
-            if (g && Math.min(g.bottom, w.bottom) - Math.max(g.top, w.top + under()) <= 0)
+            if (g && Math.min(g.bottom, w.bottom) - Math.max(g.top, w.top + fixedBarHeight()) <= 0)
               showBack(true);
           }, 150);
         }
@@ -577,7 +603,6 @@ export function createEditing(root: HTMLElement, deps: Deps) {
       placeBack(b);
     }, 150);
   };
-  // Back to the whole group from its heading when it fits above the keyboard, or else to the field with Save under it.
   function goBack() {
     const e = ed;
     if (!e) return;
@@ -588,80 +613,76 @@ export function createEditing(root: HTMLElement, deps: Deps) {
       form().getBoundingClientRect().bottom - e.sec.getBoundingClientRect().top <=
       z.bottom - z.edge - ZONE_TOP;
     const field = e.last && form().contains(e.last) ? e.last : (e.target ?? $(".f", form())!);
-    // while the member is typing, the field they left comes back above the keyboard
     const writing = typing() && form().contains(document.activeElement);
     const top = fits && !writing ? scrollY + head : targetFor(e, field, keyboardUp());
     if (top != null) glideTo(top, T().open);
     if (!writing) $(".gh h2", e.sec)?.focus({ preventScroll: true });
   }
 
-  const unsaved = () => !!ed && (ed.busy || dirty() || !!res.busy);
+  const unsaved = () => !!ed && (ed.busy || dirty() || !!res.busy || !!res.book);
 
-  function openDom(gid: Gid, key: string, draft?: Draft) {
-    const sub = gid === "career" ? (key === "resume" || key === "book" ? "res" : "lnk") : null;
-    const eid = (sub ?? gid) as Eid;
-    const base = editors[eid].draft();
+  function openDom(group: Group, key: string) {
+    const before = deps.rows(group);
+    const base = deps.draft();
     ed = {
-      gid,
+      group,
+      editor: before.find((r) => r.key === key)!.editor,
       key,
-      eid,
-      sec: $(`#g-${gid}`)!,
-      draft: draft ?? base,
-      base: snap(base),
-      before: deps.rows(gid),
+      sec: $(`#g-${group}`)!,
+      draft: base,
+      base,
+      before,
       shown: new Set(),
       asking: false,
       error: null,
       busy: false,
       saving: false,
-      labelAt: 0,
       last: null,
       next: null,
-      after: null,
       target: null,
       y0: scrollY,
       moved: false,
-      free: false,
+      userScrolled: false,
     };
+    lastOpen = group;
+    shownErrors = "";
     Object.assign(res, {
       confirm: false,
       busy: null,
       error: null,
+      uploaded: null,
       book: null,
       bookLabel: null,
       bookError: null,
     });
-    root.classList.add("editing");
     showBack(false);
-    commit();
-    return $(editors[eid].focus[key] ?? ".f", ed.sec) ?? $(".f", ed.sec)!;
+    emit();
+    return $(E(ed).focus[key] ?? ".f", ed.sec) ?? $(".f", ed.sec)!;
   }
 
   function closeDom() {
-    const { gid, before } = ed!;
+    const { group, before } = ed!;
     ed = null;
     showBack(false);
-    root.classList.remove("editing");
-    commit();
-    const after = deps.rows(gid);
+    emit();
+    const after = deps.rows(group);
     return after.filter((r, i) => r.value !== before[i]?.value).map((r) => r.key);
   }
 
-  function open(gid: Gid, key: string, from?: HTMLElement | null) {
+  function open(group: Group, key: string, from?: HTMLElement | null) {
     const y0 = scrollY;
-    from ??= $(`#g-${gid} [data-row="${key}"]`);
+    from ??= $(`#g-${group} [data-row="${key}"]`);
     from?.classList.add("press");
     const marks = from && {
-      v: mid($(".v", from)!),
+      v: centerY($(".v", from)!),
       k: $(".k", from)!.getBoundingClientRect().top,
     };
     let target!: HTMLElement;
-    let rank: (el: Element, i: number) => number = (_, i) => i;
     const plan = choreograph(
       () => {
         const prev = ed?.sec;
         if (ed) closeDom();
-        target = openDom(gid, key);
+        target = openDom(group, key);
         const e = ed!;
         const f = form();
         if (prev && prev !== e.sec) {
@@ -675,38 +696,27 @@ export function createEditing(root: HTMLElement, deps: Deps) {
         }
         const kb = coarse && target.matches("input:not([type=file])");
         const kids = $$(":scope > *", f);
-        const at = kids.findIndex((k) => k.contains(target));
-        const bar = act();
-        // The tapped field arrives first, its neighbours after it.
-        rank = (_, i) => Math.abs(i - Math.max(at, 0));
+        const tapped = Math.max(
+          kids.findIndex((k) => k.contains(target)),
+          0,
+        );
         const block = target.closest(".f") ?? $(".f", f)!;
         const c = control(block);
         const pin: Pin | undefined = marks
           ? c
-            ? { sec: e.sec, el: c, mid: true, from: marks.v }
-            : { sec: e.sec, el: $(":scope > .k", block) ?? block, mid: false, from: marks.k }
+            ? { sec: e.sec, el: c, by: "center", from: marks.v }
+            : { sec: e.sec, el: $(":scope > .k", block) ?? block, by: "top", from: marks.k }
           : undefined;
         return {
           top: targetFor(e, target, kb, pin),
           pin,
           solid: c ? block : null,
-          after: (dur, clips) => {
-            // Save's row travels with the panel's growing edge, so the edge never slices it.
-            const edge = clips.get(e.sec);
-            const b = bar.getBoundingClientRect().bottom;
-            if (dur && edge != null && b > edge) {
-              anim(bar, [{ transform: `translateY(${edge - b}px)` }, { transform: "none" }], {
-                duration: dur,
-                easing: MOVE,
-              });
-            }
-          },
+          order: (i) => Math.abs(i - tapped),
           enter: kids,
         };
       },
       {
-        swap: [...new Set([$(`#g-${gid}`)!, ...$$(".grp.open")])],
-        enterOrder: (el, i) => rank(el, i),
+        swap: [...new Set([$(`#g-${group}`)!, ...$$(".grp.open")])],
         blank: from,
       },
     );
@@ -723,35 +733,34 @@ export function createEditing(root: HTMLElement, deps: Deps) {
 
   function close(saved = false) {
     const e = ed!;
-    const { key, sec, y0, moved, free } = e;
+    const { key, sec, y0, moved, userScrolled } = e;
     const f = form();
     const field = $(E(e).focus[key] ?? ".f", sec)?.closest(".f") ?? $(".f", f)!;
     const c = control(field);
     const fr = field.getBoundingClientRect();
-    const pinFrom = c ? mid(c) : ($(":scope > .k", field) ?? field).getBoundingClientRect().top;
+    const pinFrom = c ? centerY(c) : ($(":scope > .k", field) ?? field).getBoundingClientRect().top;
     const v = view();
-    const edge = v.top + under();
+    const edge = v.top + fixedBarHeight();
     const box = sec.getBoundingClientRect();
     const side = $(".side")!;
-    const s = side.getBoundingClientRect();
-    // Go back only if the open moved the page and the member hasn't moved it since.
-    const back = moved && !free;
-    // Once the member has scrolled the field away, closing leaves what they are looking at where it is: the answers
-    // below a group above the view hold still, unless that would slide the card's column beside them.
-    const still = free && (fr.bottom <= edge + titleH() || fr.top >= v.bottom);
-    const hold =
+    const column = side.getBoundingClientRect();
+    const restore = moved && !userScrolled;
+    const fieldGone = userScrolled && (fr.bottom <= edge + titleH() || fr.top >= v.bottom);
+    const keepBelowStill =
       box.top < edge &&
-      (s.bottom <= edge || s.top >= v.bottom || getComputedStyle(side).position === "sticky");
+      (column.bottom <= edge ||
+        column.top >= v.bottom ||
+        getComputedStyle(side).position === "sticky");
     let changed: string[] = [];
     choreograph(
       () => {
         changed = closeDom();
         const rowEl = $(`[data-row="${key}"]`, sec)!;
-        if (still) {
-          if (hold) window.scrollBy(0, sec.getBoundingClientRect().bottom - box.bottom);
+        if (fieldGone) {
+          if (keepBelowStill) window.scrollBy(0, sec.getBoundingClientRect().bottom - box.bottom);
           return { closing: true, enter: $$(".gp > *", sec) };
         }
-        const top = back
+        const top = restore
           ? y0
           : scrollY +
             rowEl.getBoundingClientRect().top -
@@ -761,12 +770,11 @@ export function createEditing(root: HTMLElement, deps: Deps) {
           closing: true,
           enter: $$(".gp > *", sec),
           solid: c ? rowEl : null,
-          pin: { sec, el: $(c ? ".v" : ".k", rowEl)!, mid: !!c, from: pinFrom },
+          pin: { sec, el: $(c ? ".v" : ".k", rowEl)!, by: c ? "center" : "top", from: pinFrom },
         };
       },
       { swap: [sec], blank: c },
     );
-    // A save always says so, even when the row's text can't change.
     if (saved && !changed.length) changed = [key];
     changed.forEach((k, i) =>
       setTimeout(() => flash($(`[data-row="${k}"] .ok`, sec)), T().close * 0.6 + i * 40),
@@ -774,89 +782,62 @@ export function createEditing(root: HTMLElement, deps: Deps) {
     $(`[data-row="${key}"]`, sec)?.focus({ preventScroll: true });
   }
 
-  // "Saved" arrives as the row settles, holds, then leaves more slowly than it came.
   function flash(ok: HTMLElement | null) {
     if (!ok) return;
     ok.hidden = false;
-    ok.animate(
-      [
-        { opacity: 0, transform: reduce() ? "none" : "translateX(-6px)" },
-        { opacity: 1, transform: "none" },
-      ],
-      { duration: reduce() ? 120 : 200, easing: APPEAR, fill: "backwards" },
-    );
-    setTimeout(
-      () =>
-        ok
-          .animate([{ opacity: 1 }, { opacity: 0 }], {
-            duration: 400,
-            easing: "ease-in",
-            fill: "forwards",
-          })
-          .finished.then(
-            () => {
-              ok.hidden = true;
-              ok.getAnimations().forEach((a) => a.cancel());
-            },
-            () => {},
-          ),
-      2800,
-    );
+    cue(ok, () => {
+      ok.hidden = true;
+      ok.getAnimations().forEach((a) => a.cancel());
+    });
   }
 
-  function announce(text: string) {
-    const s = $("#you-status");
-    if (!s) return;
-    s.textContent = "";
-    setTimeout(() => (s.textContent = text), 50);
-  }
+  const announce = (text: string) => say("you-status", text);
 
-  const dirty = () => !!ed && !E(ed).instant && snap(ed.draft) !== ed.base;
+  const fields = (e: Ed) => FIELDS[GROUP_OF[e.editor]];
+  const dirty = () =>
+    !!ed && !E(ed).instant && !fields(ed).every((k) => same(ed!.draft, ed!.base, k));
 
-  // After a failed Save the page moves only as far as it must: the first problem from its question down to Save when
-  // that fits, or else down to its message, which sits under the answers; when even that is too tall, the message
-  // stays in view and the question gives way.
   function errorTop(el: Element) {
     const z = zone(el, coarse && el.matches("input"));
-    const r = el.closest(".f")!.getBoundingClientRect();
-    const hi = r.top - z.top;
-    const save = act().getBoundingClientRect().bottom - z.bottom;
-    const lo = save <= hi ? save : r.bottom - z.bottom;
-    const d = lo <= hi ? Math.min(Math.max(0, lo), hi) : lo;
-    return Math.abs(d) < 1 ? null : scrollY + d;
+    const question = el.closest(".f")!.getBoundingClientRect();
+    const toQuestion = question.top - z.top;
+    const toSave = act().getBoundingClientRect().bottom - z.bottom;
+    return reveal(toQuestion, toSave <= toQuestion ? toSave : question.bottom - z.bottom);
   }
 
-  // A message that opens above where the member went next makes its room by moving the page, so what they are on stays
-  // put, as far as that can go without lifting the message itself out of view.
   function holdTop(el: Element, was: number, added: Element[]) {
     const now = el.getBoundingClientRect().top;
     const d = now - was;
     if (d < 1) return null;
     const m = added.find((x) => x.getBoundingClientRect().bottom <= now);
-    const s = m ? Math.min(d, Math.max(0, m.getBoundingClientRect().top - zone().top)) : d;
-    return s < 1 ? null : scrollY + s;
+    return toScroll(m ? Math.min(d, Math.max(0, m.getBoundingClientRect().top - zone().top)) : d);
   }
 
-  // An error appears on blur or Save and leaves as soon as the value is fixed; typing never adds one.
+  let shownErrors = "";
   function showErrors(
     add: string[] = [],
     focusEl: Element | null = null,
     went: Element | null = null,
-  ) {
+  ): boolean {
     const e = ed!;
-    const errs = E(e).check(e.draft);
+    const errs: Partial<Record<string, string>> = errorsFor(E(e).fields, e.draft);
     const next = new Set([...e.shown, ...add].filter((k) => errs[k]));
-    if (next.size === e.shown.size && [...next].every((k) => e.shown.has(k))) {
+    const text = [...next]
+      .sort()
+      .map((k) => `${k}: ${errs[k]}`)
+      .join("\n");
+    if (text === shownErrors) {
       e.shown = next;
-      return commit();
+      return false;
     }
+    shownErrors = text;
     const f = form();
     const before = new Set($$(".f > .err:not([hidden])", f));
     const was = went && f.contains(went) ? went.getBoundingClientRect().top : null;
     const plan = choreograph(
       () => {
         e.shown = next;
-        commit();
+        emit();
         const enter = $$(".f > .err:not([hidden])", f).filter((x) => !before.has(x));
         return {
           top: focusEl ? errorTop(focusEl) : was != null ? holdTop(went!, was, enter) : null,
@@ -866,95 +847,79 @@ export function createEditing(root: HTMLElement, deps: Deps) {
       { track: $$(".f, .act", f) },
     );
     if (plan.top != null) e.moved = Math.abs(plan.top - e.y0) > 8;
+    return true;
   }
 
-  async function save() {
+  async function save(next: Next | null = null) {
     const e = ed;
     if (!e || e.busy) return;
-    const next = e.after;
-    e.after = null;
-    const errors = E(e).check(e.draft);
-    const bad = Object.keys(errors);
-    if (bad.length) {
-      const el = $(`[data-k="${bad[0]}"]`, form()) ?? $(`[data-chips="${bad[0]}"] .chip`, form());
-      showErrors(bad, el);
-      // A field reads its own error when it takes focus; a choice in a set of chips doesn't.
-      if (!el?.matches("[data-k]")) announce(errors[bad[0]!]!);
+    const bad = Object.entries(errorsFor(E(e).fields, e.draft)).filter(([, text]) => text);
+    if (bad[0]) {
+      const [k, text] = bad[0];
+      const el = $(`[data-k="${k}"]`, form()) ?? $(`[data-chips="${k}"] .chip`, form());
+      showErrors(
+        bad.map(([k]) => k),
+        el,
+      );
+      // Chips aren't described by their error the way a field is, so the error is announced.
+      if (!el?.matches("[data-k]")) announce(text!);
       return el?.focus({ preventScroll: true });
     }
     if (!dirty()) return close();
-    busy(true);
+    Object.assign(e, { busy: true, error: null });
+    const settle = slowLabel(() => {
+      if (ed !== e) return;
+      e.saving = true;
+      emit();
+    });
+    emit();
     let failure: unknown = null;
     try {
-      await deps.save(e.eid, e.draft);
+      await deps.save(e.editor, e.draft);
     } catch (caught) {
-      failure = caught ?? FAILED;
+      failure = caught ?? MESSAGES.failed;
     }
     if (ed !== e) return;
-    // Once "Saving…" shows, it stays long enough to read.
-    if (e.labelAt) await sleep(Math.max(0, e.labelAt + 400 - performance.now()));
+    const hold = settle();
+    if (hold) await hold;
     if (ed !== e) return;
     if (failure) {
-      busy(false);
+      Object.assign(e, { busy: false, saving: false });
+      emit();
       choreograph(
         () => {
-          e.error = message(failure);
-          commit();
+          e.error = failureText(failure);
+          emit();
           return { enter: [$(".act .err", form())!] };
         },
         { track: $$(".f, .act .fa", form()) },
       );
       return;
     }
-    announce(`${deps.title(e.gid)} saved.`);
+    announce(`${TITLES[e.group]} saved.`);
     close(true);
-    // "Save changes" from the question after tapping another row: that row opens once this one has saved.
-    if (next) open(next.gid, next.key);
+    if (next) open(next.group, next.key);
   }
 
-  // "Saving…" only shows for a save slow enough to notice, so a quick one never flickers.
-  let slowLabel = 0;
-  function busy(on: boolean) {
-    const e = ed!;
-    e.busy = on;
-    e.labelAt = 0;
-    e.saving = false;
-    clearTimeout(slowLabel);
-    if (on) {
-      e.error = null;
-      slowLabel = window.setTimeout(() => {
-        if (ed !== e) return;
-        e.saving = true;
-        e.labelAt = performance.now();
-        commit();
-      }, BUSY_AFTER);
-    }
-    commit();
-  }
-
-  // The whole group when it fits on screen, or else the question with the first changed field above it.
   function askTop() {
     const e = ed!;
     const z = zone();
     const a = act();
-    const s = e.sec.getBoundingClientRect();
-    const r = a.getBoundingClientRect();
-    if (s.top >= z.edge && r.bottom <= z.bottom) return null;
-    if (r.bottom - s.top <= z.bottom - z.edge - ZONE_TOP)
-      return scrollY + s.top - z.edge - ZONE_TOP;
-    const base = new Map(JSON.parse(e.base) as [string, string][]);
-    const f =
-      $$(".f", form()).find((x) =>
-        x.dataset.keys!.split(" ").some((k) => flat(e.draft[k]) !== base.get(k)),
-      ) ?? a;
-    const lo = r.bottom - z.bottom;
-    const hi = Math.min(f.getBoundingClientRect().top, r.top) - z.top;
-    const d = lo <= hi ? Math.min(Math.max(0, lo), hi) : lo;
-    return Math.abs(d) < 1 ? null : scrollY + d;
+    const group = e.sec.getBoundingClientRect();
+    const question = a.getBoundingClientRect();
+    if (group.top >= z.edge && question.bottom <= z.bottom) return null;
+    const groupFits = question.bottom - group.top <= z.bottom - z.edge - ZONE_TOP;
+    if (groupFits) return scrollY + group.top - z.edge - ZONE_TOP;
+    const changed: string[] = fields(e).filter((k) => !same(e.draft, e.base, k));
+    const firstChanged =
+      $$(".f", form()).find((x) => x.dataset.keys!.split(" ").some((k) => changed.includes(k))) ??
+      a;
+    return reveal(
+      Math.min(firstChanged.getBoundingClientRect().top, question.top) - z.top,
+      question.bottom - z.bottom,
+    );
   }
 
-  // Leaving a changed editor asks first; `next` is the row the member tapped, if any. The question stays once asked;
-  // asking again only brings it back into view.
   function ask(next: Next | null = null) {
     const e = ed!;
     e.next = next;
@@ -962,7 +927,7 @@ export function createEditing(root: HTMLElement, deps: Deps) {
       choreograph(
         () => {
           e.asking = true;
-          commit();
+          emit();
           return { top: askTop(), enter: [act()] };
         },
         { track: $$(".f", form()) },
@@ -980,7 +945,7 @@ export function createEditing(root: HTMLElement, deps: Deps) {
     choreograph(
       () => {
         e.asking = false;
-        commit();
+        emit();
         return { enter: [act()] };
       },
       { track: $$(".f", form()) },
@@ -1004,86 +969,95 @@ export function createEditing(root: HTMLElement, deps: Deps) {
   }
 
   function paintRes(focus?: string) {
-    commit();
+    emit();
     if (focus && ed) $(focus, form())?.focus({ preventScroll: true });
   }
 
+  // The resume actions finish only in the editor they started in; a reopened one has its own `res`.
   async function upload(file: File | undefined) {
     const e = ed;
     if (!file || !e) return;
     Object.assign(res, { busy: "upload", error: null });
     paintRes("#replace");
-    const failure = await deps.upload(file);
+    const result = await deps.upload(file);
     if (ed !== e) return;
-    Object.assign(res, { busy: null, error: failure });
+    res.busy = null;
+    if (!result.ok) {
+      res.error = result.error;
+      paintRes("#replace");
+      return announce(result.error);
+    }
+    res.uploaded = result.resume;
     paintRes("#replace");
-    if (failure) return announce(failure);
     flash($(".file .ok", form()));
     announce("Resume saved.");
   }
 
   async function removeResume() {
+    const e = ed;
     res.busy = "remove";
     paintRes("[data-act=rm-yes]");
     try {
       await deps.removeResume();
-      Object.assign(res, { confirm: false, busy: null, error: null });
+      if (ed !== e) return;
+      Object.assign(res, { confirm: false, busy: null, error: null, uploaded: null });
       paintRes("#replace");
       announce("Resume removed. You're out of the resume book.");
     } catch (failure) {
-      Object.assign(res, { busy: null, error: message(failure) });
+      if (ed !== e) return;
+      Object.assign(res, { busy: null, error: failureText(failure) });
       paintRes("[data-act=rm-yes]");
-      announce(message(failure));
+      announce(failureText(failure));
     }
   }
 
-  // The resume book saves the moment it's switched, and says so: "Saving…" after 150ms, then "Saved", or the old
-  // answer back with an error.
-  async function toggleBook(v: "in" | "out") {
-    if (!deps.hasResume() || res.book || (v === "in") === deps.inBook()) return;
-    Object.assign(res, { book: v, bookLabel: null, bookError: null });
-    commit();
-    let shownAt = 0;
-    const slow = setTimeout(() => {
+  async function toggleBook(on: boolean) {
+    const e = ed;
+    if (!(res.uploaded ?? deps.resume()) || res.book || on === deps.inBook()) return;
+    Object.assign(res, { book: on ? "in" : "out", bookLabel: null, bookError: null });
+    emit();
+    const settle = slowLabel(() => {
+      if (ed !== e) return;
       res.bookLabel = "saving";
-      shownAt = performance.now();
-      commit();
-    }, BUSY_AFTER);
+      emit();
+    });
     let failure: unknown = null;
     try {
-      await deps.setBook(v === "in");
+      await deps.setBook(on);
     } catch (caught) {
-      failure = caught ?? FAILED;
+      failure = caught ?? MESSAGES.failed;
     }
-    clearTimeout(slow);
-    if (shownAt) await sleep(Math.max(0, shownAt + 400 - performance.now()));
+    const hold = settle();
+    if (hold) await hold;
+    if (ed !== e) return;
     res.book = null;
     if (failure) {
       Object.assign(res, {
         bookLabel: null,
         bookError: "We couldn't change that. Check your connection and try again.",
       });
-      commit();
+      emit();
       announce("We couldn't change the resume book. Check your connection and try again.");
-      return $(`[data-chips="book"] [data-v="${v}"]`)?.focus({ preventScroll: true });
+      return $(`[data-chips="book"] [data-v="${on ? "in" : "out"}"]`)?.focus({
+        preventScroll: true,
+      });
     }
     res.bookLabel = "saved";
-    commit();
+    emit();
     if (ed) flash($(".bk .ok", form()));
-    announce(v === "in" ? "You're in the resume book." : "You're out of the resume book.");
+    announce(on ? "You're in the resume book." : "You're out of the resume book.");
   }
 
   const actions: Record<string, () => void> = {
     cancel: () => close(),
-    done: () => close(),
+    done: () => void (res.busy || close()),
     keep,
-    discard: () => (ed?.next ? open(ed.next.gid, ed.next.key) : close()),
+    discard: () => (ed?.next ? open(ed.next.group, ed.next.key) : close()),
     save: () => {
       const next = ed!.next;
       unask();
       $("[type=submit]", form())?.focus({ preventScroll: true });
-      ed!.after = next;
-      void save();
+      void save(next);
     },
     upload: () => void (res.busy || $<HTMLInputElement>("#resume-file")?.click()),
     rm: () => {
@@ -1103,7 +1077,7 @@ export function createEditing(root: HTMLElement, deps: Deps) {
   let pointerType = "mouse";
   let pressedAt = { x: 0, y: 0 };
 
-  const listeners: [EventTarget, string, EventListener, AddEventListenerOptions?][] = [
+  const handlers: [EventTarget, string, EventListener, AddEventListenerOptions?][] = [
     [
       document,
       "pointerdown",
@@ -1113,7 +1087,7 @@ export function createEditing(root: HTMLElement, deps: Deps) {
         pressedAt = { x: e.clientX, y: e.clientY };
         root.classList.add("pointer");
         // A press on the scrollbar is the member moving the page.
-        if (e.target === document.documentElement) released();
+        if (e.target === document.documentElement) userScrolls();
       }) as EventListener,
     ],
     [document, "keydown", () => root.classList.remove("pointer"), { capture: true }],
@@ -1127,8 +1101,16 @@ export function createEditing(root: HTMLElement, deps: Deps) {
           later = null;
         }),
     ],
-    [document, "pointercancel", () => (down = false)],
-    // Cancel and Save don't take focus from the field, so the keyboard stays up through a save and leaves with the close.
+    [
+      document,
+      "pointercancel",
+      () => {
+        down = false;
+        later = null;
+      },
+    ],
+    // The editor's buttons and the Back pill don't take focus from the field, so the keyboard stays up through a
+    // save.
     [
       document,
       "mousedown",
@@ -1136,10 +1118,10 @@ export function createEditing(root: HTMLElement, deps: Deps) {
         if ((e.target as Element).closest?.(".act .fa button, .back")) e.preventDefault();
       },
     ],
-    // A touch takes the page back from a glide at once. iOS also shows :active only when a touch listener exists.
+    // iOS applies :active only when a touch listener exists, so this one also serves every button.
     [document, "touchstart", stopGlide, { passive: true }],
-    [document, "touchmove", released, { passive: true }],
-    [document, "wheel", released, { passive: true }],
+    [document, "touchmove", userScrolls, { passive: true }],
+    [document, "wheel", userScrolls, { passive: true }],
     [
       document,
       "click",
@@ -1147,13 +1129,13 @@ export function createEditing(root: HTMLElement, deps: Deps) {
         const t = e.target as Element;
         if (t.closest(".back")) return goBack();
         const rowEl = t.closest<HTMLElement>("button.row");
-        // Every other row stays live: a clean editor hands over in one motion, a changed one asks first.
         if (rowEl && root.contains(rowEl) && !(ed && form().contains(rowEl))) {
-          const gid = rowEl.closest(".grp")!.id.slice(2) as Gid;
+          const group = rowEl.closest<HTMLElement>(".grp")!.id.slice(2);
           const key = rowEl.dataset.row!;
-          if (!ed) return open(gid, key, rowEl);
+          if (!isGroup(group)) return;
+          if (!ed) return open(group, key, rowEl);
           if (ed.busy) return;
-          return dirty() ? ask({ gid, key }) : open(gid, key, rowEl);
+          return dirty() ? ask({ group, key }) : open(group, key, rowEl);
         }
         if (!ed) return;
         const a = t.closest<HTMLElement>("[data-act]");
@@ -1163,18 +1145,19 @@ export function createEditing(root: HTMLElement, deps: Deps) {
           if (ed.busy) return;
           const k = chip.parentElement!.dataset.chips!;
           const v = chip.dataset.v!;
-          if (k === "book") return void toggleBook(v as "in" | "out");
-          E(ed).toggle?.(k, v, ed.draft);
+          if (k === "book") return void toggleBook(v === "in");
+          const patch = toggleField(ed.draft, k, v);
+          if (patch) ed.draft = { ...ed.draft, ...patch };
           if (ed.asking) keep();
-          return showErrors();
+          if (!showErrors()) emit();
+          return;
         }
-        // With a mouse, a click outside the editor leaves a clean one and asks about a changed one. The card and the
-        // section titles are only looked at, so a click there does neither.
         if (
           pointerType === "mouse" &&
           !ed.sec.contains(t) &&
           !t.closest("a, button, input, select, label, .cf-host, .gh, .kick") &&
-          !ed.busy
+          !ed.busy &&
+          !res.busy
         ) {
           if (dirty()) ask();
           else close();
@@ -1190,13 +1173,13 @@ export function createEditing(root: HTMLElement, deps: Deps) {
           return dismiss();
         }
         const t = e.target as HTMLElement;
-        // A key that scrolled the page is the member moving it; whether one does depends on the control and the browser.
+        // Space and the arrow keys scroll only for some controls and browsers, so check whether the page moved.
         if (SCROLL_KEYS.has(e.key)) {
           const y = scrollY;
-          requestAnimationFrame(() => requestAnimationFrame(() => scrollY !== y && released()));
+          requestAnimationFrame(() => requestAnimationFrame(() => scrollY !== y && userScrolls()));
         }
-        // Return moves on to the next field. On the last, a phone's keyboard closes, as Safari's own check above it
-        // does, and only Save saves; a computer's Return still saves.
+        // On a phone the last field's Return only closes the keyboard, like Safari's check above it, and Save is what
+        // saves.
         if (e.key === "Enter" && ed && t.matches("input[data-k]") && form().contains(t)) {
           if (t.enterKeyHint === "next") {
             e.preventDefault();
@@ -1208,7 +1191,6 @@ export function createEditing(root: HTMLElement, deps: Deps) {
             return t.blur();
           }
         }
-        // Arrow keys move the choice inside a radio group, as native radios do.
         const c = t.closest?.<HTMLElement>("[role=radio]");
         const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
         if (!c || !step) return;
@@ -1223,17 +1205,21 @@ export function createEditing(root: HTMLElement, deps: Deps) {
       document,
       "input",
       (e) => {
-        const t = e.target as HTMLInputElement;
-        if (!ed || !t.dataset.k || !form().contains(t)) return;
+        const t = e.target as HTMLInputElement | HTMLSelectElement;
         const k = t.dataset.k;
-        // A save in flight keeps what it is saving; a select can't be made read-only, so it is put back.
-        if (ed.busy) return void (t.value = String(ed.draft[k] ?? ""));
-        const prev = ed.draft[k];
-        ed.draft[k] = t.value;
-        const focus = E(ed).change?.(k, ed.draft, prev);
+        if (!ed || !k || !isField(k) || !form().contains(t)) return;
+        // A select can't be read-only like the text fields, so a change during a save is put back.
+        if (ed.busy) return void (t.value = String(ed.draft[k]));
+        const prev = ed.draft;
+        const patch = setField(prev, k, t.value);
+        if (!patch) return;
+        ed.draft = { ...prev, ...patch };
+        const more = E(ed).change?.(k, ed.draft, prev);
+        if (more?.patch) ed.draft = { ...ed.draft, ...more.patch };
         if (ed.asking) keep();
-        showErrors();
-        if (focus) $(focus, form())?.focus();
+        // Text fields are uncontrolled, so only a select or a changed message has anything to render.
+        if (!showErrors() && (t.matches("select") || more?.patch)) emit();
+        if (more?.focus) $(more.focus, form())?.focus();
       },
     ],
     [
@@ -1253,10 +1239,8 @@ export function createEditing(root: HTMLElement, deps: Deps) {
       (e) => {
         const t = e.target as HTMLElement;
         if (ed && form().contains(t) && t.dataset.k) ed.last = t;
-        root.classList.toggle("typing", typing());
       },
     ],
-    [document, "focusout", () => queueMicrotask(() => root.classList.toggle("typing", typing()))],
     [
       document,
       "focusout",
@@ -1271,7 +1255,8 @@ export function createEditing(root: HTMLElement, deps: Deps) {
           later = () =>
             ed === at &&
             showErrors([k], null, went ?? document.elementFromPoint(pressedAt.x, pressedAt.y));
-        // A field removed while focused blurs inside React's own render, which can't take another one.
+        // A field removed while focused blurs inside React's commit, where flushSync can't run, so this waits a
+        // microtask.
         else queueMicrotask(() => ed === at && showErrors([k], null, went));
       },
     ],
@@ -1288,29 +1273,33 @@ export function createEditing(root: HTMLElement, deps: Deps) {
     [window, "scroll", scrolled, { passive: true }],
   ];
 
+  let ac = new AbortController();
+
   return {
-    state: () => ({ ed, res }),
+    subscribe: (fn: () => void) => {
+      listeners.add(fn);
+      return () => void listeners.delete(fn);
+    },
+    version: () => version,
+    state: (): Snapshot => ({ ed, res, lastOpen }),
     unsaved,
-    start() {
+    start(el: HTMLElement) {
+      root = el;
+      ac = new AbortController();
+      const { signal } = ac;
       document.body.append(probe, standIn);
-      for (const [target, type, fn, options] of listeners)
-        target.addEventListener(type, fn, options);
-      visualViewport?.addEventListener("resize", resized);
-      visualViewport?.addEventListener("resize", scrolled);
-      visualViewport?.addEventListener("scroll", scrolled);
+      for (const [target, type, fn, options] of handlers)
+        target.addEventListener(type, fn, { ...options, signal });
+      visualViewport?.addEventListener("resize", resized, { signal });
+      visualViewport?.addEventListener("resize", scrolled, { signal });
+      visualViewport?.addEventListener("scroll", scrolled, { signal });
     },
     stop() {
-      for (const [target, type, fn, options] of listeners) {
-        target.removeEventListener(type, fn, options);
-      }
-      visualViewport?.removeEventListener("resize", resized);
-      visualViewport?.removeEventListener("resize", scrolled);
-      visualViewport?.removeEventListener("scroll", scrolled);
+      ac.abort();
       cancelAnimationFrame(backFrame);
       clearTimeout(backStill);
       clearTimeout(backWait);
       clearTimeout(vvWait);
-      clearTimeout(slowLabel);
       stopGlide();
       clearTimeout(handoff);
       probe.remove();

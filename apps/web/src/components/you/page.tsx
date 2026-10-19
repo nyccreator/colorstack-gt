@@ -1,17 +1,9 @@
 import { api } from "@colorstack-gt/backend/convex/_generated/api";
 import { TEXT_MAX_LENGTH } from "@colorstack-gt/backend/convex/lib/config";
-import { toggleRace } from "@colorstack-gt/backend/convex/lib/demographics";
-import {
-  graduationYearOptions,
-  isGraduationYearAllowed,
-} from "@colorstack-gt/backend/convex/lib/graduation";
-import {
-  isPhone,
-  personalEmailError,
-  profileError,
-  profileName,
-  type ProfileSite,
-} from "@colorstack-gt/backend/convex/lib/identity";
+import { PREFER_NOT } from "@colorstack-gt/backend/convex/lib/demographics";
+import { type Group, GROUPS } from "@colorstack-gt/backend/convex/lib/groups";
+import { profileName, type ProfileSite } from "@colorstack-gt/backend/convex/lib/identity";
+import { RESUME_LIMIT } from "@colorstack-gt/backend/convex/lib/messages";
 import { DEGREE_PROGRAMS, degreeLevel } from "@colorstack-gt/backend/convex/lib/programs";
 import { useBlocker } from "@tanstack/react-router";
 import { useMutation, useQuery } from "convex/react";
@@ -20,60 +12,56 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
-  useMemo,
-  useReducer,
   useRef,
+  useState,
+  useSyncExternalStore,
 } from "react";
-import { flushSync } from "react-dom";
 
-import { Bar, mayLeave, Pages, unsavedWork } from "../frame";
-import { ErrorBadge } from "../message";
+import type { Answers, Profile } from "@/lib/member";
+
+import { Bar, mayLeave, Pages } from "../frame";
 import {
-  type Answers,
+  type Draft,
+  draftFrom,
+  errorsFor,
+  type Field as Key,
+  uploadResume,
+  useSave,
+} from "../member/draft";
+import { type Editor as Eid, GROUP_OF, TITLES } from "../member/groups";
+import { breaks, few } from "../member/summary";
+import { TaskLink } from "../member/task-link";
+import { ErrorBadge } from "../message";
+import { Prefixed } from "../onboarding/controls";
+import {
   CLASS_STANDINGS,
   GENDERS,
   GPA_RANGES,
   HOBBIES,
-  type Interests,
+  labelOf,
+  labelsOf,
   LOOKING_FOR,
-  PRONOUNS,
+  type Option,
+  PRONOUN_OPTIONS,
   RACES,
   SEASONS,
   SELF_DESCRIBE,
-  type Studies,
-  TASKS,
+  YEAR_OPTIONS,
   YES_NO,
 } from "../onboarding/options";
-import { Prefixed } from "../onboarding/controls";
-import { type Profile, RESUME_LIMIT, uploadResume } from "../onboarding/screens";
 import { MemberCard } from "./card";
-import {
-  createEditing,
-  type Draft,
-  type Ed,
-  type EditorDef,
-  type Editing,
-  type Eid,
-  type Gid,
-  type Res,
-  type Row,
-  type Value,
-} from "./editing";
+import { createEditing, type Ed, type EditorDef, type Res, type Row } from "./editing";
 
-type Option = { readonly value: string; readonly label: string };
-type Group = { id: Gid; title: string; note?: string; rows: (m: Profile) => Row[] };
-type Latest = { me: Profile; answers: Answers | null };
+type Text = { [K in Key]: Draft[K] extends string ? K : never }[Key];
+type GroupView = { note?: string; rows: (m: Profile) => Row[] };
 
 const PRIVACY =
   "Only used in the totals we report. Never on your profile or shared with companies.";
-const PNTA = "prefer_not_to_answer";
-const PRONOUN_OPTIONS = PRONOUNS.map((value) => ({ value, label: value }));
 const BOOK = [
   { value: "in", label: "Included" },
   { value: "out", label: "Not included" },
 ] as const;
-const EXTRAS = TASKS.filter((task) => task.value !== "engage");
-// What each link shows as a tile on one-column screens: the destination's own logo, unaltered, and one word.
+// These are each destination's official logos and stay unaltered.
 const SHORT = {
   national: { label: "National", logo: "/assets/logos/colorstack-national.png" },
   whatsapp: { label: "WhatsApp", logo: "/assets/logos/whatsapp.svg" },
@@ -81,387 +69,234 @@ const SHORT = {
 } as const;
 const LEAD: Partial<Record<Eid, string>> = {
   background: PRIVACY,
-  res: "Changes here apply right away.",
+  resume: "Changes here apply right away.",
 };
+const LABEL = {
+  firstName: "First name",
+  lastName: "Last name",
+  choice: "Pronouns",
+  writeIn: "Your pronouns",
+  personalEmail: "Personal email",
+  phone: "Phone",
+  standing: "Class standing",
+  major: "Major",
+  minor: "Second major or minor",
+  season: "Graduation season",
+  year: "Graduation year",
+  gpa: "GPA range",
+  linkedin: "LinkedIn",
+  github: "GitHub",
+  resumeBook: "Resume book",
+  races: "Race and ethnicity",
+  gender: "Gender",
+  firstGeneration: "First-generation college student",
+  lowIncome: "Low-income background",
+  lookingFor: "What you're looking for",
+  hobbies: "Hobbies and interests",
+} satisfies Record<Key, string>;
 
-const str = (v: Value | undefined) => (typeof v === "string" ? v : "");
-const list = (v: Value | undefined) => (Array.isArray(v) ? v : []);
-const label = (options: readonly Option[], v: string | undefined) =>
-  options.find((option) => option.value === v)?.label ?? v ?? "";
-const labels = (options: readonly Option[], vs: readonly string[] = []) => {
-  const all = options.filter((option) => vs.includes(option.value)).map((option) => option.label);
-  return all.length > 3 ? `${all.slice(0, 2).join(", ")} + ${all.length - 2} more` : all.join(", ");
-};
-// A long address or link breaks after "@", "." or "/" before it breaks anywhere else, though a short last part such as
-// "com" stays with the one before it rather than standing alone on a line.
-export const breaks = (text: string) => {
-  const parts = text.split(/(?<=[@./])/);
-  if (parts.length > 1 && parts.at(-1)!.length < 6) parts.splice(-2, 2, parts.slice(-2).join(""));
-  return parts.flatMap((part, i) => (i ? [<wbr key={i} />, part] : [part]));
-};
 const size = (bytes: number) =>
   bytes < 1024 * 1024
     ? `${Math.max(1, Math.round(bytes / 1024))} KB`
     : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-const toggled = (values: string[], v: string) =>
-  values.includes(v) ? values.filter((x) => x !== v) : [...values, v];
+const of = (editor: Eid, rows: Omit<Row, "editor">[]): Row[] =>
+  rows.map((row) => ({ ...row, editor }));
 
-const GROUPS: Group[] = [
-  {
-    id: "who",
-    title: "Who you are",
+const GROUP: Record<Group, GroupView> = {
+  name: {
+    rows: (m) =>
+      of("name", [
+        {
+          key: "name",
+          label: "Name",
+          value: m.name ? `${m.name.firstName} ${m.name.lastName}` : "",
+        },
+        { key: "pronouns", label: LABEL.choice, value: m.name?.pronouns ?? "" },
+      ]),
+  },
+  contact: {
+    rows: (m) =>
+      of("contact", [
+        { key: "gt", label: "Georgia Tech email", value: m.gtEmail, fixed: true },
+        { key: "email", label: LABEL.personalEmail, value: m.contact?.personalEmail ?? "" },
+        { key: "phone", label: LABEL.phone, value: m.contact?.phone ?? "" },
+      ]),
+  },
+  studies: {
+    rows: ({ studies: s }) =>
+      of("studies", [
+        {
+          key: "standing",
+          label: LABEL.standing,
+          value: labelOf(CLASS_STANDINGS, s?.classStanding),
+        },
+        { key: "major", label: LABEL.major, value: s?.major ?? "" },
+        { key: "minor", label: LABEL.minor, value: s?.minor ?? "" },
+        {
+          key: "grad",
+          label: "Expected graduation",
+          value: s ? `${labelOf(SEASONS, s.graduationSeason)} ${s.graduationYear}` : "",
+        },
+        { key: "gpa", label: LABEL.gpa, value: labelOf(GPA_RANGES, s?.gpa) },
+      ]),
+  },
+  materials: {
     rows: (m) => [
-      { key: "name", label: "Name", value: m.name ? `${m.name.firstName} ${m.name.lastName}` : "" },
-      { key: "pronouns", label: "Pronouns", value: m.name?.pronouns ?? "" },
+      ...of("resume", [
+        { key: "resume", label: "Resume", value: m.resume?.name ?? "" },
+        {
+          key: "book",
+          label: LABEL.resumeBook,
+          value: m.resume && m.materials?.resumeBook ? "Included" : "Not included",
+        },
+      ]),
+      ...of("links", [
+        {
+          key: "linkedin",
+          label: LABEL.linkedin,
+          value: profileName("linkedin", m.materials?.linkedin ?? ""),
+        },
+        {
+          key: "github",
+          label: LABEL.github,
+          value: profileName("github", m.materials?.github ?? ""),
+        },
+      ]),
     ],
   },
-  {
-    id: "contact",
-    title: "How we reach you",
-    rows: (m) => [
-      { key: "gt", label: "Georgia Tech email", value: m.gtEmail, fixed: true },
-      { key: "email", label: "Personal email", value: m.contact?.personalEmail ?? "" },
-      { key: "phone", label: "Phone", value: m.contact?.phone ?? "" },
-    ],
+  interests: {
+    rows: (m) =>
+      of("interests", [
+        {
+          key: "looking",
+          label: LABEL.lookingFor,
+          value: few(labelsOf(LOOKING_FOR, m.interests?.lookingFor)),
+        },
+        {
+          key: "hobbies",
+          label: LABEL.hobbies,
+          value: few(labelsOf(HOBBIES, m.interests?.hobbies)),
+        },
+      ]),
   },
-  {
-    id: "studies",
-    title: "Your studies",
-    rows: ({ studies: s }) => [
-      { key: "standing", label: "Class standing", value: label(CLASS_STANDINGS, s?.classStanding) },
-      { key: "major", label: "Major", value: s?.major ?? "" },
-      { key: "minor", label: "Second major or minor", value: s?.minor ?? "" },
-      {
-        key: "grad",
-        label: "Expected graduation",
-        value: s ? `${label(SEASONS, s.graduationSeason)} ${s.graduationYear}` : "",
-      },
-      { key: "gpa", label: "GPA range", value: label(GPA_RANGES, s?.gpa) },
-    ],
-  },
-  {
-    id: "career",
-    title: "Your career",
-    rows: (m) => [
-      { key: "resume", label: "Resume", value: m.resume?.name ?? "" },
-      {
-        key: "book",
-        label: "Resume book",
-        value: m.resume && m.materials?.resumeBook ? "Included" : "Not included",
-      },
-      {
-        key: "linkedin",
-        label: "LinkedIn",
-        value: profileName("linkedin", m.materials?.linkedin ?? ""),
-      },
-      { key: "github", label: "GitHub", value: profileName("github", m.materials?.github ?? "") },
-    ],
-  },
-  {
-    id: "interests",
-    title: "Your interests",
-    rows: (m) => [
-      {
-        key: "looking",
-        label: "What you're looking for",
-        value: labels(LOOKING_FOR, m.interests?.lookingFor),
-      },
-      {
-        key: "hobbies",
-        label: "Hobbies and interests",
-        value: labels(HOBBIES, m.interests?.hobbies),
-      },
-    ],
-  },
-  {
-    id: "background",
-    title: "Your background",
+  background: {
     note: PRIVACY,
-    rows: (m) => [
-      { key: "answers", label: "Your answers", value: m.reported ? "Saved privately" : "" },
-    ],
+    rows: (m) =>
+      of("background", [
+        {
+          key: "answers",
+          label: "Your answers",
+          value: m.saved.background ? "Saved privately" : "",
+        },
+      ]),
   },
-];
-const GROUP = Object.fromEntries(GROUPS.map((g) => [g.id, g])) as Record<Gid, Group>;
+};
 
-function editorsFor(get: () => Latest): Record<Eid, EditorDef> {
-  return {
-    who: {
-      focus: { name: "#first", pronouns: "#choice" },
-      draft: () => {
-        const name = get().me.name;
-        const saved = name?.pronouns ?? "";
-        const listed = PRONOUNS.some((option) => option === saved && option !== SELF_DESCRIBE);
-        return {
-          first: name?.firstName ?? "",
-          last: name?.lastName ?? "",
-          choice: listed || !saved ? saved || PRONOUNS[0] : SELF_DESCRIBE,
-          writeIn: listed ? "" : saved,
-        };
-      },
-      change: (k, d) => {
-        if (k === "choice") return d.choice === SELF_DESCRIBE ? "#writeIn" : "#choice";
-      },
-      check: (d) => {
-        const errors: Record<string, string> = {};
-        if (!str(d.first).trim()) errors.first = "Enter your first name.";
-        if (!str(d.last).trim()) errors.last = "Enter your last name.";
-        if (d.choice === SELF_DESCRIBE && !str(d.writeIn).trim()) {
-          errors.writeIn = "Enter your pronouns.";
-        }
-        return errors;
-      },
+const EDITORS: Record<Eid, EditorDef> = {
+  name: {
+    focus: { name: "#firstName", pronouns: "#choice" },
+    change: (k, d) => {
+      if (k === "choice" && d.choice === SELF_DESCRIBE) return { focus: "#writeIn" };
     },
-    contact: {
-      focus: { email: "#email", phone: "#phone" },
-      draft: () => ({
-        email: get().me.contact?.personalEmail ?? "",
-        phone: get().me.contact?.phone ?? "",
-      }),
-      check: (d) => {
-        const errors: Record<string, string> = {};
-        const email = str(d.email);
-        const problem = personalEmailError(email);
-        if (problem) errors.email = problem;
-        if (!isPhone(str(d.phone))) errors.phone = "Enter a valid phone number.";
-        return errors;
-      },
+    fields: ["firstName", "lastName", "writeIn"],
+  },
+  contact: {
+    focus: { email: "#personalEmail", phone: "#phone" },
+    fields: ["personalEmail", "phone"],
+  },
+  studies: {
+    focus: {
+      standing: "#standing",
+      major: "#major",
+      minor: "#minor",
+      grad: "#season",
+      gpa: "#gpa",
     },
-    studies: {
-      focus: {
-        standing: "#standing",
-        major: "#major",
-        minor: "#minor",
-        grad: "#season",
-        gpa: "#gpa",
-      },
-      draft: () => {
-        const s = get().me.studies;
-        return {
-          standing: s?.classStanding ?? CLASS_STANDINGS[0].value,
-          major: s?.major ?? "",
-          minor: s?.minor ?? "",
-          season: s?.graduationSeason ?? SEASONS[0].value,
-          year: String(s?.graduationYear ?? new Date().getFullYear()),
-          gpa: s?.gpa ?? GPA_RANGES[0].value,
-        };
-      },
-      change: (k, d, prev) => {
-        if (k !== "standing" || degreeLevel(str(prev)) === degreeLevel(str(d.standing))) return;
-        d.major = "";
-        const major = document.getElementById("major") as HTMLInputElement | null;
-        if (major) major.value = "";
-      },
-      check: (d) => {
-        const errors: Record<string, string> = {};
-        if (!str(d.major).trim()) errors.major = "Choose your major.";
-        if (!isGraduationYearAllowed(Number(d.year))) {
-          errors.year = "Choose a graduation year within four years of today.";
-        }
-        return errors;
-      },
+    // A new degree level has its own majors, so the typed one goes.
+    change: (k, d, prev) => {
+      if (k === "standing" && d.standing && prev.standing && level(d) !== level(prev)) {
+        return { patch: { major: "" } };
+      }
     },
-    lnk: {
-      focus: { linkedin: "#linkedin", github: "#github" },
-      draft: () => ({
-        linkedin: profileName("linkedin", get().me.materials?.linkedin ?? ""),
-        github: profileName("github", get().me.materials?.github ?? ""),
-      }),
-      check: (d) => {
-        const errors: Record<string, string> = {};
-        for (const site of ["linkedin", "github"] as const) {
-          const message = profileError(site, str(d[site]));
-          if (message) errors[site] = message;
-        }
-        return errors;
-      },
-    },
-    interests: {
-      chips: true,
-      focus: { looking: '[data-chips="looking"] .chip', hobbies: '[data-chips="hobbies"] .chip' },
-      draft: () => ({
-        looking: [...(get().me.interests?.lookingFor ?? [])],
-        hobbies: [...(get().me.interests?.hobbies ?? [])],
-      }),
-      toggle: (k, v, d) => {
-        d[k] = toggled(list(d[k]), v);
-      },
-      check: () => ({}),
-    },
-    background: {
-      chips: true,
-      focus: { answers: "#h-background" },
-      draft: () => {
-        const a = get().answers;
-        return {
-          race: [...(a?.raceEthnicity ?? [])],
-          gender: a?.gender ?? "",
-          firstGen: a?.firstGeneration ?? "",
-          lowIncome: a?.lowIncome ?? "",
-        };
-      },
-      toggle: (k, v, d) => {
-        d[k] = k === "race" ? toggleRace(list(d.race), v) : v;
-      },
-      check: (d) => {
-        const errors: Record<string, string> = {};
-        if (!list(d.race).length) {
-          errors.race = "Choose at least one answer for race and ethnicity.";
-        }
-        for (const k of ["gender", "firstGen", "lowIncome"]) {
-          if (!str(d[k])) errors[k] = "Choose an answer.";
-        }
-        return errors;
-      },
-    },
-    res: {
-      instant: true,
-      focus: { resume: "#replace", book: '[data-chips="book"] .chip[aria-checked="true"]' },
-      draft: () => ({}),
-      check: () => ({}),
-    },
-  };
-}
+    fields: ["major", "year"],
+  },
+  links: {
+    focus: { linkedin: "#linkedin", github: "#github" },
+    fields: ["linkedin", "github"],
+  },
+  interests: {
+    chips: true,
+    focus: { looking: '[data-chips="lookingFor"] .chip', hobbies: '[data-chips="hobbies"] .chip' },
+    fields: [],
+  },
+  background: {
+    chips: true,
+    focus: { answers: "#h-background" },
+    fields: ["races", "gender", "firstGeneration", "lowIncome"],
+  },
+  resume: {
+    instant: true,
+    focus: { resume: "#replace", book: '[data-chips="book"] .chip[aria-checked="true"]' },
+    fields: [],
+  },
+};
+
+const level = (d: Draft) => (d.standing ? degreeLevel(d.standing) : "bachelors");
 
 export function YouPage({ me, answers }: { me: Profile; answers: Answers | null }) {
   const resumeUrl = useQuery(api.members.resumeUrl, me.resume ? {} : "skip");
-  const saveName = useMutation(api.members.saveName);
-  const saveContact = useMutation(api.members.saveContact);
-  const saveStudies = useMutation(api.members.saveStudies);
-  const saveMaterials = useMutation(api.members.saveMaterials);
-  const saveInterests = useMutation(api.members.saveInterests);
-  const saveDemographics = useMutation(api.members.saveDemographics);
+  const save = useSave();
   const removeResume = useMutation(api.members.removeResume);
-  const completeTask = useMutation(api.members.completeTask);
-  const [, render] = useReducer((n: number) => n + 1, 0);
   const root = useRef<HTMLDivElement>(null);
-  const editing = useRef<Editing | null>(null);
-  const latest = useRef<Latest>({ me, answers });
-  latest.current = { me, answers };
-  const editors = useMemo(() => editorsFor(() => latest.current), []);
+  const latest = useRef({ me, answers, save });
+  // oxlint-disable-next-line react/refs -- The controller's callbacks must read the newest props, and its state is not React's.
+  latest.current = { me, answers, save };
+  // oxlint-disable-next-line react/refs -- The controller's callbacks read the ref later, never during render.
+  const [controller] = useState(() =>
+    createEditing({
+      rows: (group) => GROUP[group].rows(latest.current.me),
+      editors: EDITORS,
+      draft: () => draftFrom(latest.current.me, latest.current.answers),
+      save: (editor, d) => latest.current.save(GROUP_OF[editor], d, latest.current.me),
+      setBook: (on) => {
+        const { me, answers, save } = latest.current;
+        return save("materials", { ...draftFrom(me, answers), resumeBook: on }, me);
+      },
+      upload: uploadResume,
+      removeResume,
+      resume: () => latest.current.me.resume,
+      inBook: () => Boolean(latest.current.me.resume && latest.current.me.materials?.resumeBook),
+    }),
+  );
+  useSyncExternalStore(controller.subscribe, controller.version, () => 0);
+  const { ed, res, lastOpen } = controller.state();
 
-  // Leaving with unsaved changes, by any way, asks in the browser's own dialog.
-  const blocks = useCallback(() => !mayLeave(), []);
-  const unsaved = useCallback(() => editing.current?.unsaved() ?? false, []);
+  const unsaved = controller.unsaved;
+  const blocks = useCallback(() => !mayLeave(unsaved), [unsaved]);
   useBlocker({ shouldBlockFn: blocks, enableBeforeUnload: unsaved });
 
   useEffect(() => {
-    const get = () => latest.current;
-    const save = (eid: Eid, d: Draft) => {
-      const m = get().me;
-      switch (eid) {
-        case "who":
-          return saveName({
-            firstName: str(d.first),
-            lastName: str(d.last),
-            pronouns: d.choice === SELF_DESCRIBE ? str(d.writeIn).trim() : str(d.choice),
-          });
-        case "contact":
-          return saveContact({ personalEmail: str(d.email), phone: str(d.phone) });
-        case "studies":
-          return saveStudies({
-            classStanding: d.standing as Studies["classStanding"],
-            major: str(d.major),
-            minor: str(d.minor).trim() || undefined,
-            graduationSeason: d.season as Studies["graduationSeason"],
-            graduationYear: Number(d.year),
-            gpa: d.gpa as Studies["gpa"],
-          });
-        case "lnk":
-          return saveMaterials({
-            linkedin: str(d.linkedin).trim() || undefined,
-            github: str(d.github).trim() || undefined,
-            resumeBook: Boolean(m.resume && m.materials?.resumeBook),
-          });
-        case "interests":
-          return saveInterests({
-            lookingFor: list(d.looking) as Interests["lookingFor"],
-            hobbies: list(d.hobbies) as Interests["hobbies"],
-          });
-        case "background":
-          return saveDemographics({
-            raceEthnicity: list(d.race) as Answers["raceEthnicity"],
-            gender: d.gender as Answers["gender"],
-            firstGeneration: d.firstGen as Answers["firstGeneration"],
-            lowIncome: d.lowIncome as Answers["lowIncome"],
-          });
-        case "res":
-          return Promise.resolve();
-      }
-    };
-    const controller = createEditing(root.current!, {
-      commit: () => flushSync(() => render()),
-      title: (gid) => GROUP[gid].title,
-      rows: (gid) => GROUP[gid].rows(get().me),
-      editors,
-      save,
-      setBook: (on) =>
-        saveMaterials({
-          linkedin: get().me.materials?.linkedin,
-          github: get().me.materials?.github,
-          resumeBook: on,
-        }),
-      upload: uploadResume,
-      removeResume: () => removeResume(),
-      hasResume: () => Boolean(get().me.resume),
-      inBook: () => Boolean(get().me.resume && get().me.materials?.resumeBook),
-    });
-    editing.current = controller;
-    controller.start();
-    unsavedWork.check = controller.unsaved;
+    controller.start(root.current!);
     window.scrollTo(0, 0);
-    return () => {
-      unsavedWork.check = () => false;
-      controller.stop();
-      editing.current = null;
-    };
-  }, []);
-
-  const state = editing.current?.state();
-  // the pill keeps its last label while it leaves
-  const lastOpen = useRef<Gid>("who");
-  if (state?.ed) lastOpen.current = state.ed.gid;
-  const since = me.joinedAt
-    ? new Date(me.joinedAt).toLocaleDateString("en-US", { month: "long", year: "numeric" })
-    : "";
+    return () => controller.stop();
+  }, [controller]);
 
   return (
     <div ref={root} className="you">
-      <Bar signOut nav={<Pages />} className="bar" />
+      <Bar signOut unsaved={unsaved} nav={<Pages />} className="bar" />
       <main>
         <h1 className="sr-only">You</h1>
         <div className="lb">
           <div className="side">
-            <MemberCard
-              seed={me.gtEmail}
-              name={`${me.name?.firstName ?? ""} ${me.name?.lastName ?? ""}`.trim()}
-              since={since}
-            />
+            <MemberCard me={me} />
             <div className="stay">
               <h2 className="kick" id="stay-h">
                 Stay connected
               </h2>
               <ul className="links" aria-labelledby="stay-h">
-                {EXTRAS.map((task) => (
-                  <li key={task.value}>
-                    <a
-                      className="lnk"
-                      href={task.href}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={() => void completeTask({ task: task.value })}
-                      onAuxClick={(e) => e.button === 1 && void completeTask({ task: task.value })}
-                    >
-                      <img className="st" src={SHORT[task.value].logo} alt="" />
-                      <span className="txt">
-                        <b>{task.title}</b>
-                        <span>{task.detail}</span>
-                      </span>
-                      <span className="short" aria-hidden>
-                        {SHORT[task.value].label}
-                      </span>
-                      <i className="ic out" />
-                    </a>
+                {(Object.keys(SHORT) as (keyof typeof SHORT)[]).map((task) => (
+                  <li key={task}>
+                    <TaskLink task={task} logo={SHORT[task].logo} short={SHORT[task].label} />
                   </li>
                 ))}
               </ul>
@@ -470,19 +305,18 @@ export function YouPage({ me, answers }: { me: Profile; answers: Answers | null 
           <div className="groups">
             {GROUPS.map((group) => (
               <GroupView
-                key={group.id}
+                key={group}
                 group={group}
                 me={me}
-                ed={state?.ed ?? null}
-                res={state?.res}
-                editors={editors}
+                ed={ed}
+                res={res}
                 resumeUrl={resumeUrl ?? undefined}
               />
             ))}
           </div>
         </div>
         <button type="button" className="back">
-          <span>Back to {GROUP[lastOpen.current].title.toLowerCase()}</span>
+          <span>Back to {TITLES[lastOpen].toLowerCase()}</span>
           <i className="ic" aria-hidden />
         </button>
       </main>
@@ -511,10 +345,7 @@ function RowView({ row }: { row: Row }) {
     >
       <span className="k">{row.label}</span>
       <span className={row.value ? "v" : "v add"}>{row.value ? breaks(row.value) : "Add"}</span>
-      <span className="ok" hidden>
-        <i className="ic tick" />
-        Saved
-      </span>
+      <i className="ic tick ok" hidden />
       <i className="ic chev" />
     </button>
   );
@@ -525,49 +356,45 @@ function GroupView({
   me,
   ed,
   res,
-  editors,
   resumeUrl,
 }: {
   group: Group;
   me: Profile;
   ed: Ed | null;
-  res?: Res;
-  editors: Record<Eid, EditorDef>;
+  res: Res;
   resumeUrl?: string | null;
 }) {
-  const open = ed?.gid === group.id ? ed : null;
-  const rows = group.rows(me).map((row) => <RowView key={row.key} row={row} />);
-  const form =
-    open && res ? (
-      <Editor ed={open} me={me} res={res} editor={editors[open.eid]} resumeUrl={resumeUrl} />
-    ) : null;
+  const open = ed?.group === group ? ed : null;
+  const rows = GROUP[group].rows(me);
+  const editors = [...new Set(rows.map((row) => row.editor))];
+  const views = (list: Row[]) => list.map((row) => <RowView key={row.key} row={row} />);
+  const form = open ? (
+    <Editor ed={open} me={me} res={res} editor={EDITORS[open.editor]} resumeUrl={resumeUrl} />
+  ) : null;
 
   return (
-    <section
-      className={open ? "grp open" : "grp"}
-      id={`g-${group.id}`}
-      aria-labelledby={`h-${group.id}`}
-    >
+    <section className={open ? "grp open" : "grp"} id={`g-${group}`} aria-labelledby={`h-${group}`}>
       <div className="gh">
-        <h2 id={`h-${group.id}`} tabIndex={-1}>
-          {group.title}
+        <h2 id={`h-${group}`} tabIndex={-1}>
+          {TITLES[group]}
         </h2>
       </div>
       <div className="gp">
-        {group.id === "career" ? (
-          <>
-            <div className={open?.eid === "lnk" ? "sub off" : "sub"} data-sub="res">
-              {open?.eid === "res" ? form : rows.slice(0, 2)}
-            </div>
-            <div className={open?.eid === "res" ? "sub off" : "sub"} data-sub="lnk">
-              {open?.eid === "lnk" ? form : rows.slice(2)}
-            </div>
-          </>
-        ) : (
-          (form ?? rows)
-        )}
+        {editors.length > 1
+          ? editors.map((editor) => (
+              <div
+                key={editor}
+                className={open && open.editor !== editor ? "sub off" : "sub"}
+                data-sub={editor}
+              >
+                {open?.editor === editor
+                  ? form
+                  : views(rows.filter((row) => row.editor === editor))}
+              </div>
+            ))
+          : (form ?? views(rows))}
       </div>
-      {group.note ? <p className="pv">{group.note}</p> : null}
+      {GROUP[group].note ? <p className="pv">{GROUP[group].note}</p> : null}
     </section>
   );
 }
@@ -583,7 +410,7 @@ function Field({
   error,
   children,
 }: {
-  keys: string;
+  keys: readonly string[];
   label: string;
   sub?: string;
   id?: string;
@@ -594,7 +421,7 @@ function Field({
   children: ReactNode;
 }) {
   const named = group && !radio;
-  const errorId = `${keys.split(" ")[0]}-error`;
+  const errorId = `${keys[0]}-error`;
   const text = sub ? (
     <>
       {label} <span className="ks">{sub}</span>
@@ -603,7 +430,7 @@ function Field({
     label
   );
   return (
-    <div className={tall ? "f tall" : "f"} data-keys={keys}>
+    <div className={tall ? "f tall" : "f"} data-keys={keys.join(" ")}>
       {group ? (
         <span className="k" id={`${group}-label`}>
           {text}
@@ -633,7 +460,6 @@ function Field({
   );
 }
 
-// One answer is a radio group (one tab stop, arrow keys move the choice); several are toggle buttons.
 function ChipSet({
   k,
   options,
@@ -644,7 +470,7 @@ function ChipSet({
   invalid,
 }: {
   k: string;
-  options: readonly Option[];
+  options: readonly Option<string>[];
   on: readonly string[];
   quiet?: string;
   disabled?: boolean;
@@ -700,25 +526,24 @@ function Editor({
   resumeUrl?: string | null;
 }) {
   const d = ed.draft;
-  const errors = editor.check(d);
-  const error = (keys: string) => {
-    const k = keys.split(" ").find((x) => ed.shown.has(x));
+  const errors: Partial<Record<string, string>> = errorsFor(editor.fields, d);
+  const error = (keys: readonly string[]) => {
+    const k = keys.find((x) => ed.shown.has(x));
     return k ? errors[k] : undefined;
   };
-  const control = (k: string, block = k) => ({
+  const control = (k: Key, block: Key = k) => ({
     id: k,
     "data-k": k,
     "aria-invalid": ed.shown.has(k) || undefined,
     "aria-describedby": ed.shown.has(k) ? `${block}-error` : undefined,
   });
-  const text = (k: string, block = k, last = true) => ({
+  const text = (k: Text, block: Key = k, last = true) => ({
     ...control(k, block),
-    defaultValue: str(d[k]),
+    defaultValue: d[k],
     maxLength: TEXT_MAX_LENGTH,
     enterKeyHint: last ? ("done" as const) : ("next" as const),
     readOnly: ed.busy,
   });
-  // A pasted link keeps only the name after the prefix the field already shows.
   const link = (site: ProfileSite, last = true) => ({
     ...text(site, site, last),
     autoCapitalize: "none",
@@ -730,8 +555,8 @@ function Editor({
       if (name !== el.value.trim()) el.value = name;
     },
   });
-  const select = (k: string, options: readonly Option[], block = k) => (
-    <select {...control(k, block)} defaultValue={str(d[k])}>
+  const select = (k: Text, options: readonly Option<string>[], block: Key = k) => (
+    <select {...control(k, block)} defaultValue={d[k]}>
       {options.map((option) => (
         <option key={option.value} value={option.value}>
           {option.label}
@@ -741,34 +566,44 @@ function Editor({
   );
 
   let fields: ReactNode = null;
-  switch (ed.eid) {
-    case "who":
+  switch (ed.editor) {
+    case "name":
       fields = (
         <>
-          <Field keys="first last" label="Name" id="first" error={error("first last")}>
+          <Field
+            keys={["firstName", "lastName"]}
+            label="Name"
+            id="firstName"
+            error={error(["firstName", "lastName"])}
+          >
             <div className="pair">
               <input
-                {...text("first", "first", false)}
+                {...text("firstName", "firstName", false)}
                 autoComplete="given-name"
                 placeholder="First"
-                aria-label="First name"
+                aria-label={LABEL.firstName}
               />
               <input
-                {...text("last", "first")}
+                {...text("lastName", "firstName")}
                 autoComplete="family-name"
                 placeholder="Last"
-                aria-label="Last name"
+                aria-label={LABEL.lastName}
               />
             </div>
           </Field>
-          <Field keys="choice writeIn" label="Pronouns" id="choice" error={error("choice writeIn")}>
+          <Field
+            keys={["choice", "writeIn"]}
+            label={LABEL.choice}
+            id="choice"
+            error={error(["choice", "writeIn"])}
+          >
             <div className={d.choice === SELF_DESCRIBE ? "pair" : undefined}>
               {select("choice", PRONOUN_OPTIONS)}
               {d.choice === SELF_DESCRIBE ? (
                 <input
                   {...text("writeIn", "choice")}
-                  aria-label="Your pronouns"
-                  placeholder="Your pronouns"
+                  aria-label={LABEL.writeIn}
+                  placeholder={LABEL.writeIn}
                 />
               ) : null}
             </div>
@@ -780,91 +615,101 @@ function Editor({
       fields = (
         <>
           <RowView
-            row={{ key: "gt", label: "Georgia Tech email", value: me.gtEmail, fixed: true }}
+            row={{
+              key: "gt",
+              label: "Georgia Tech email",
+              value: me.gtEmail,
+              fixed: true,
+              editor: "contact",
+            }}
           />
-          <Field keys="email" label="Personal email" id="email" error={error("email")}>
+          <Field
+            keys={["personalEmail"]}
+            label={LABEL.personalEmail}
+            id="personalEmail"
+            error={error(["personalEmail"])}
+          >
             <input
-              {...text("email", "email", false)}
+              {...text("personalEmail", "personalEmail", false)}
               type="email"
               inputMode="email"
               autoComplete="email"
             />
           </Field>
-          <Field keys="phone" label="Phone" id="phone" error={error("phone")}>
+          <Field keys={["phone"]} label={LABEL.phone} id="phone" error={error(["phone"])}>
             <input {...text("phone")} type="tel" inputMode="tel" autoComplete="tel" />
           </Field>
         </>
       );
       break;
     case "studies": {
-      const years = graduationYearOptions().map(String);
-      if (!years.includes(str(d.year))) years.push(str(d.year));
+      const years = YEAR_OPTIONS.some((option) => option.value === d.year)
+        ? YEAR_OPTIONS
+        : [...YEAR_OPTIONS, { value: d.year, label: d.year }];
       fields = (
         <>
-          <Field keys="standing" label="Class standing" id="standing">
+          <Field keys={["standing"]} label={LABEL.standing} id="standing">
             {select("standing", CLASS_STANDINGS)}
           </Field>
-          <Field keys="major" label="Major" id="major" error={error("major")}>
+          <Field keys={["major"]} label={LABEL.major} id="major" error={error(["major"])}>
             <input
+              key={level(d)}
               {...text("major", "major", false)}
               list="majors"
               autoComplete="off"
               placeholder="Start typing"
             />
             <datalist id="majors">
-              {DEGREE_PROGRAMS[degreeLevel(str(d.standing))].map((program) => (
+              {DEGREE_PROGRAMS[level(d)].map((program) => (
                 <option key={program} value={program} />
               ))}
             </datalist>
           </Field>
-          <Field keys="minor" label="Second major or minor" id="minor">
+          <Field keys={["minor"]} label={LABEL.minor} id="minor">
             <input {...text("minor")} placeholder="Add one" />
           </Field>
           <Field
-            keys="season year"
+            keys={["season", "year"]}
             label="Expected graduation"
             group="grad"
-            error={error("season year")}
+            error={error(["season", "year"])}
           >
             <div className="pair">
-              <select
-                {...control("season")}
-                aria-label="Graduation season"
-                defaultValue={str(d.season)}
-              >
+              <select {...control("season")} aria-label={LABEL.season} defaultValue={d.season}>
                 {SEASONS.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
                 ))}
               </select>
-              <select
-                {...control("year", "season")}
-                aria-label="Graduation year"
-                defaultValue={str(d.year)}
-              >
-                {years.map((year) => (
-                  <option key={year} value={year}>
-                    {year}
+              <select {...control("year", "season")} aria-label={LABEL.year} defaultValue={d.year}>
+                {years.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
                   </option>
                 ))}
               </select>
             </div>
           </Field>
-          <Field keys="gpa" label="GPA range" id="gpa">
+          <Field keys={["gpa"]} label={LABEL.gpa} id="gpa">
             {select("gpa", GPA_RANGES)}
           </Field>
         </>
       );
       break;
     }
-    case "lnk":
+    case "links":
       fields = (
         <>
-          <Field keys="linkedin" label="LinkedIn" id="linkedin" error={error("linkedin")}>
+          <Field
+            keys={["linkedin"]}
+            label={LABEL.linkedin}
+            id="linkedin"
+            error={error(["linkedin"])}
+          >
             <Prefixed prefix="linkedin.com/in/" {...link("linkedin", false)} />
           </Field>
-          <Field keys="github" label="GitHub" id="github" error={error("github")}>
+          <Field keys={["github"]} label={LABEL.github} id="github" error={error(["github"])}>
             <Prefixed prefix="github.com/" {...link("github")} />
           </Field>
         </>
@@ -873,11 +718,11 @@ function Editor({
     case "interests":
       fields = (
         <>
-          <Field keys="looking" label="What you're looking for" group="looking" tall>
-            <ChipSet k="looking" options={LOOKING_FOR} on={list(d.looking)} />
+          <Field keys={["lookingFor"]} label={LABEL.lookingFor} group="lookingFor" tall>
+            <ChipSet k="lookingFor" options={LOOKING_FOR} on={d.lookingFor} />
           </Field>
-          <Field keys="hobbies" label="Hobbies and interests" group="hobbies" tall>
-            <ChipSet k="hobbies" options={HOBBIES} on={list(d.hobbies)} />
+          <Field keys={["hobbies"]} label={LABEL.hobbies} group="hobbies" tall>
+            <ChipSet k="hobbies" options={HOBBIES} on={d.hobbies} />
           </Field>
         </>
       );
@@ -886,35 +731,35 @@ function Editor({
       fields = (
         <>
           <Field
-            keys="race"
-            label="Race and ethnicity"
+            keys={["races"]}
+            label={LABEL.races}
             sub="All that apply"
-            group="race"
+            group="races"
             tall
-            error={error("race")}
+            error={error(["races"])}
           >
             <ChipSet
-              k="race"
+              k="races"
               options={RACES}
-              on={list(d.race)}
-              quiet={PNTA}
-              invalid={ed.shown.has("race")}
+              on={d.races}
+              quiet={PREFER_NOT}
+              invalid={ed.shown.has("races")}
             />
           </Field>
           {(
             [
-              ["gender", "Gender", "gender", GENDERS],
-              ["firstGen", "First-generation college student", "first-gen", YES_NO],
-              ["lowIncome", "Low-income background", "low-income", YES_NO],
+              ["gender", GENDERS],
+              ["firstGeneration", YES_NO],
+              ["lowIncome", YES_NO],
             ] as const
-          ).map(([k, title, group, options]) => (
-            <Field key={k} keys={k} label={title} group={group} tall radio error={error(k)}>
+          ).map(([k, options]) => (
+            <Field key={k} keys={[k]} label={LABEL[k]} group={k} tall radio error={error([k])}>
               <ChipSet
                 k={k}
                 options={options}
-                on={[str(d[k])]}
-                quiet={PNTA}
-                radio={group}
+                on={[d[k]]}
+                quiet={PREFER_NOT}
+                radio={k}
                 invalid={ed.shown.has(k)}
               />
             </Field>
@@ -922,12 +767,18 @@ function Editor({
         </>
       );
       break;
-    case "res": {
-      const resume = me.resume;
+    case "resume": {
+      const resume = res.uploaded ?? me.resume;
       const book = res.book ?? (resume && me.materials?.resumeBook ? "in" : "out");
       fields = (
         <>
-          <Field keys="resume" label="Resume" group="resume" tall error={res.error ?? undefined}>
+          <Field
+            keys={["resume"]}
+            label="Resume"
+            group="resume"
+            tall
+            error={res.error ?? undefined}
+          >
             {resume ? (
               <p className="file">
                 <b>{resume.name}</b>
@@ -997,8 +848,8 @@ function Editor({
             />
           </Field>
           <Field
-            keys="book"
-            label="Resume book"
+            keys={["book"]}
+            label={LABEL.resumeBook}
             group="book"
             tall
             radio
@@ -1032,9 +883,14 @@ function Editor({
     }
   }
 
-  const lead = LEAD[ed.eid];
+  const lead = LEAD[ed.editor];
   return (
-    <form className={ed.busy ? "ed busy" : "ed"} id="ed" noValidate aria-labelledby={`h-${ed.gid}`}>
+    <form
+      className={ed.busy ? "ed busy" : "ed"}
+      id="ed"
+      noValidate
+      aria-labelledby={`h-${ed.group}`}
+    >
       {lead ? <p className="lead">{lead}</p> : null}
       {fields}
       <div className="act">

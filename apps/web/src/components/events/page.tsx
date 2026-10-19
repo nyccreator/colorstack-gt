@@ -1,13 +1,7 @@
-import { useNavigate, useRouter } from "@tanstack/react-router";
-import {
-  type CSSProperties,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+
+import { DESK, PHONE, useMedia } from "@/lib/media";
 
 import { Bar, Pages } from "../frame";
 import { EVENTS } from "./data";
@@ -15,22 +9,7 @@ import { away, Details, type Fit, fitStack, Nothing, Picture, stackShape, Zoom }
 import { Gallery, Skeletons } from "./gallery";
 import { View } from "./view";
 
-// Laptops tall enough for the pinned bar get the selected event beside the gallery; everything else opens events over
-// the page. The You page pins its bar at the same size.
-const DESK = "(min-width: 1024px) and (min-height: 560px)";
-const PHONE = "(max-width: 599px)";
 const NONE = { art: "event", tone: "navy-medium" } as const;
-
-const useMedia = (query: string) =>
-  useSyncExternalStore(
-    (listener) => {
-      const list = matchMedia(query);
-      list.addEventListener("change", listener);
-      return () => list.removeEventListener("change", listener);
-    },
-    () => matchMedia(query).matches,
-    () => false,
-  );
 
 function useViewport() {
   const [size, setSize] = useState(() => ({ w: innerWidth, h: innerHeight }));
@@ -42,13 +21,15 @@ function useViewport() {
   return size;
 }
 
-// The laptop's column of the selected event, and the same column for an empty calendar on tablets.
 const column = (w: number) => Math.max(300, Math.min(330, 0.22 * w));
 const columnGap = (w: number) => Math.max(40, Math.min(64, 0.045 * w));
+const rowFor = (w: number, cap = 300) => Math.max(180, Math.min(300, w / 2.9, cap));
 
 export function EventsPage({ picked }: { picked?: string }) {
   const navigate = useNavigate();
   const router = useRouter();
+  // The router restores the page's scroll as it settles, so a closing event waits for that to find its tile.
+  const settled = useRouterState({ select: (s) => s.status === "idle" });
   const desk = useMedia(DESK);
   const phone = useMedia(PHONE);
   const viewport = useViewport();
@@ -64,6 +45,7 @@ export function EventsPage({ picked }: { picked?: string }) {
 
   const main = useRef<HTMLElement>(null);
   const side = useRef<HTMLElement>(null);
+  const stack = useRef<HTMLDivElement>(null);
   const gallery = useRef<HTMLElement>(null);
   const probe = useRef<HTMLDivElement>(null);
   const skeletons = useRef<HTMLDivElement>(null);
@@ -74,59 +56,69 @@ export function EventsPage({ picked }: { picked?: string }) {
   const viewed = useRef<string | undefined>(undefined);
   const [fit, setFit] = useState<Fit | null>(null);
   const [width, setWidth] = useState(0);
-  const [lifted, setLifted] = useState(false);
   // The opened event stays on screen while it leaves, even once the address no longer names it.
   const [viewing, setViewing] = useState<string | undefined>(undefined);
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- The viewed event must outlive the address while it flies back.
     if (opened) setViewing(opened.id);
     else if (desk) setViewing(undefined);
   }, [opened, desk]);
 
-  // Laptops: the column is as wide as the stack that fits the screen, at one size for every event. Its heading takes
-  // 34px of the room: a 22px line and 12px under it.
+  // The probe is watched too, so a font that loads late refits the stack.
   useLayoutEffect(() => {
     const el = side.current;
-    if (!desk || !el || !probe.current) return setFit(null);
-    const cs = getComputedStyle(el);
-    const room = el.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - 34;
-    const shapes = upcoming.length ? upcoming.map(stackShape) : [1.6];
-    setFit(fitStack(probe.current, shapes, column(viewport.w), room));
+    const stk = stack.current;
+    const pr = probe.current;
+    if (!desk || !el || !stk || !pr) return setFit(null);
+    const measure = () => {
+      const room = el.clientHeight - parseFloat(getComputedStyle(el).paddingBottom) - stk.offsetTop;
+      const shapes = upcoming.length ? upcoming.map(stackShape) : [1.6];
+      const next = fitStack(pr, shapes, column(viewport.w), room);
+      setFit((f) => (f?.width === next.width && f.t === next.t ? f : next));
+    };
+    measure();
+    const watch = new ResizeObserver(measure);
+    watch.observe(pr);
+    return () => watch.disconnect();
   }, [desk, viewport, upcoming]);
 
   useLayoutEffect(() => {
     const el = gallery.current;
     if (!el) return;
-    const cs = getComputedStyle(el);
-    setWidth(el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight));
+    const measure = () => {
+      const cs = getComputedStyle(el);
+      setWidth(el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight));
+    };
+    measure();
+    const watch = new ResizeObserver(measure);
+    watch.observe(el);
+    return () => watch.disconnect();
   }, [desk, viewport, fit]);
 
-  // The skeletons take only the height left on the screen, so they never make it scroll, and with too little room
-  // they go. Off laptops they run under the Events and You switch, since they fade out and hold nothing; without them
-  // the page keeps just enough room at its foot to lift the follow link clear of the switch.
   useLayoutEffect(() => {
     const page = main.current;
     const box = skeletons.current;
-    if (!page) return;
+    if (!page || !gallery.current) return;
     page.style.paddingBottom = "";
     if (!box) return;
     box.hidden = false;
     box.style.height = "";
-    const end = desk ? innerHeight - 48 : innerHeight;
+    const end = innerHeight - parseFloat(getComputedStyle(gallery.current).paddingBottom);
     const h = end - box.getBoundingClientRect().top - scrollY;
     if (h < (phone ? 96 : 160)) {
       box.hidden = true;
-      if (!desk) page.style.paddingBottom = `${Math.max(0, 104 - Math.max(h, 0))}px`;
+      if (!desk) {
+        const foot = parseFloat(getComputedStyle(document.documentElement).scrollPaddingBottom);
+        page.style.paddingBottom = `${Math.max(0, foot - Math.max(h, 0))}px`;
+      }
       return;
     }
     box.style.height = `${h}px`;
     if (!desk) page.style.paddingBottom = "0px";
-  });
+  }, [desk, phone, viewport, width, fit, upcoming.length]);
 
-  // When the column scrolls on its own, a fade under the bar shows where its top has gone.
-  const lift = () => setLifted((side.current?.scrollTop ?? 0) > 0);
   useLayoutEffect(() => {
     if (side.current) side.current.scrollTop = 0;
-    lift();
   }, [fit, selected]);
 
   useEffect(() => {
@@ -135,7 +127,7 @@ export function EventsPage({ picked }: { picked?: string }) {
     title.current?.focus({ preventScroll: true });
   }, [picked]);
 
-  // Leaving an opened event, by any way, puts the member back on its tile.
+  // Focus returns to the tile of the event last viewed, which the dialog's own focus return can't know.
   useEffect(() => {
     if (viewing) return;
     const id = viewed.current;
@@ -169,13 +161,13 @@ export function EventsPage({ picked }: { picked?: string }) {
     }
   }
 
-  // Off laptops a row and its captions also fit the screen's height, for a phone on its side.
   const gap = phone ? 16 : 24;
+  const fitsScreen = desk ? Infinity : Math.max(180, viewport.h - 230);
   const target = Math.min(
     phone
       ? Math.round(Math.min(220, 0.5 * viewport.w))
-      : Math.max(180, Math.min(300, width / 2.9, fit ? 0.875 * fit.width : 300)),
-    desk ? Infinity : Math.max(180, viewport.h - 230),
+      : rowFor(width, fit ? 0.875 * fit.width : 300),
+    fitsScreen,
   );
   const grid = { width, gap, target, phone };
 
@@ -206,12 +198,11 @@ export function EventsPage({ picked }: { picked?: string }) {
           <Skeletons box={skeletons} {...grid} />
         </>
       );
-    // Tablets keep the laptop's column for the message, with the skeletons beside it.
     const w = column(viewport.w);
     const g = columnGap(viewport.w);
     const rest = width - w - g;
     return (
-      <div className="zcol" style={{ "--zw": `${w}px`, "--cg": `${g}px` } as CSSProperties}>
+      <div className="zcol" style={{ "--zw": `${w}px`, "--cg": `${g}px` }}>
         <div className="stk">
           <p className="mh">
             <b className="mo">Next up</b>
@@ -219,69 +210,56 @@ export function EventsPage({ picked }: { picked?: string }) {
           <Picture event={NONE} width={w} height={Math.min(w / 1.6, 0.3 * viewport.h)} />
           <Nothing />
         </div>
-        <Skeletons
-          box={skeletons}
-          {...grid}
-          width={rest}
-          target={Math.max(180, Math.min(300, rest / 2.9))}
-        />
+        <Skeletons box={skeletons} {...grid} width={rest} target={rowFor(rest)} />
       </div>
     );
   }
 
   return (
-    <div
-      className="you events"
-      style={fit ? ({ "--fw": `${fit.width}px` } as CSSProperties) : undefined}
-    >
+    <div className="you events" style={fit ? { "--fw": `${fit.width}px` } : undefined}>
       <Bar signOut nav={<Pages />} className="bar" />
       <main ref={main}>
         <h1 className="sr-only">Events</h1>
         {desk ? (
           <aside
             ref={side}
-            className={lifted ? "side-event lifted" : "side-event"}
+            className="side-event"
             aria-label={selected ? "Selected event" : undefined}
-            style={fit ? ({ "--t": fit.t } as CSSProperties) : undefined}
-            onScroll={lift}
+            style={fit ? { "--t": fit.t } : undefined}
           >
-            {fit ? (
-              <>
-                <p className="mh">
-                  <b className="mo">
-                    {selected && selected !== next ? away(selected, now) : "Next up"}
-                  </b>
-                  {selected === next && selected ? (
-                    <span className="n">{away(selected, now)}</span>
-                  ) : null}
-                </p>
-                <div className="stk">
-                  {selected ? (
-                    <>
-                      <Picture
-                        event={selected}
-                        width={fit.width}
-                        height={fit.width / stackShape(selected)}
-                      >
-                        <Zoom event={selected} />
-                      </Picture>
-                      <Details
-                        event={selected}
-                        now={now}
-                        next={selected === next}
-                        narrow={fit.width / fit.t < 300}
-                        title={title}
-                      />
-                    </>
-                  ) : (
-                    <>
-                      <Picture event={NONE} width={fit.width} height={fit.width / 1.6} />
-                      <Nothing />
-                    </>
-                  )}
-                </div>
-              </>
-            ) : null}
+            <p className="mh">
+              <b className="mo">
+                {selected && selected !== next ? away(selected, now) : "Next up"}
+              </b>
+              {selected === next && selected ? (
+                <span className="n">{away(selected, now)}</span>
+              ) : null}
+            </p>
+            <div ref={stack} className="stk">
+              {!fit ? null : selected ? (
+                <>
+                  <Picture
+                    event={selected}
+                    width={fit.width}
+                    height={fit.width / stackShape(selected)}
+                  >
+                    <Zoom event={selected} />
+                  </Picture>
+                  <Details
+                    key={selected.id}
+                    event={selected}
+                    now={now}
+                    next={selected === next}
+                    title={title}
+                  />
+                </>
+              ) : (
+                <>
+                  <Picture event={NONE} width={fit.width} height={fit.width / 1.6} />
+                  <Nothing />
+                </>
+              )}
+            </div>
           </aside>
         ) : null}
         <section ref={gallery} className="gal" aria-label="Upcoming events">
@@ -312,8 +290,9 @@ export function EventsPage({ picked }: { picked?: string }) {
           now={now}
           next={next}
           probe={probe}
+          // oxlint-disable-next-line react/refs -- Read once as the dialog mounts, to know whether it grows from a tile.
           grow={grow.current}
-          away={!opened}
+          routed={!!opened || !settled}
           onPage={(id) =>
             void navigate({ to: ".", search: { event: id }, replace: true, resetScroll: false })
           }

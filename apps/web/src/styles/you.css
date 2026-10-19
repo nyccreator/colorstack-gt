@@ -1,0 +1,1346 @@
+.you .back {
+  position: fixed;
+  z-index: 50;
+  bottom: var(--spacing-foot);
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 54px;
+  padding: 0 22px 0 26px;
+  border-radius: 9999px;
+  background: var(--color-navy);
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--color-navy) 35%, transparent);
+  color: var(--color-diploma);
+  font-family: var(--font-display);
+  font-size: var(--text-control);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  max-width: calc(100vw - 32px);
+  cursor: pointer;
+  translate: -50% 160%;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.22s,
+    translate 0.4s var(--ease-move),
+    background-color 0.18s,
+    visibility 0s linear 0.4s;
+}
+
+@media (min-width: 1024px) {
+  .you .back {
+    left: calc(50% + (var(--side) + var(--side-gap)) / 2);
+  }
+}
+
+.you .back[data-on] {
+  translate: -50% 0;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 0.22s,
+    translate 0.4s var(--ease-move),
+    background-color 0.18s,
+    visibility 0s;
+}
+
+/* While the keyboard is up iOS moves fixed elements with the page, so the pill hides until scrolling stops and the
+   script can place it. */
+.you .back[data-on][data-moving] {
+  opacity: 0;
+  transition-duration: 0.09s;
+}
+
+.you .back span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.you .back .ic {
+  width: 18px;
+  height: 18px;
+  --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 5v14M6 13l6 6 6-6'/%3E%3C/svg%3E");
+}
+
+.you .back[data-dir="up"] .ic {
+  rotate: 180deg;
+}
+
+.you .back:active {
+  background: color-mix(in srgb, var(--color-diploma) 13%, var(--color-navy));
+}
+
+@media (hover: hover) {
+  .you .back:hover {
+    background: color-mix(in srgb, var(--color-diploma) 13%, var(--color-navy));
+  }
+}
+
+/* card.tsx reads these tokens to draw the card's art. */
+.cf-host {
+  --cf-navy: var(--color-navy);
+  --cf-lift: var(--color-navy-medium);
+  --cf-cream: var(--color-diploma);
+  --cf-burdell: var(--color-burdell);
+  aspect-ratio: 440 / 277;
+}
+
+.cf-wrap {
+  --cf-r: clamp(16px, 5.4cqw, 24px);
+  position: relative;
+  perspective: 900px;
+  container-type: inline-size;
+}
+
+.cf-tilt {
+  position: relative;
+  isolation: isolate;
+}
+
+.cf-shade {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: var(--cf-r);
+  pointer-events: none;
+  box-shadow: 0 2.8cqw 4cqw -0.4cqw color-mix(in srgb, var(--color-navy) 30%, transparent);
+  opacity: 0;
+}
+
+.cf {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 440 / 277;
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: var(--cf-r);
+  background: var(--color-navy);
+  color: var(--color-diploma);
+  container-type: inline-size;
+  font-family: var(--font-sans);
+  box-shadow: 0 1.4cqw 2.1cqw color-mix(in srgb, var(--color-navy) 30%, transparent);
+}
+
+.cf-sheen {
+  position: absolute;
+  z-index: 1;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 50% 50%,
+    color-mix(in srgb, var(--color-diploma) 8%, transparent),
+    color-mix(in srgb, var(--color-diploma) 2.5%, transparent) 18%,
+    transparent 38%
+  );
+  opacity: 0;
+}
+
+.cf-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.cf-edge {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-diploma) 12%, transparent),
+    inset 0 3px 3px -2px color-mix(in srgb, var(--color-diploma) 8%, transparent),
+    inset 1px 0 0 color-mix(in srgb, var(--color-diploma) 5%, transparent),
+    inset 3px 0 3px -2px color-mix(in srgb, var(--color-diploma) 4%, transparent);
+}
+
+.cf::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  box-shadow: inset 0 -1.5px 1px color-mix(in srgb, var(--color-navy) 50%, transparent);
+}
+
+.cf-f {
+  position: absolute;
+  z-index: 2;
+  inset: 6.6cqw 7.3cqw;
+  display: grid;
+  grid-template: "w" auto "." 1fr "b" auto / minmax(0, 1fr);
+  color: color-mix(in srgb, var(--color-diploma) 78%, transparent);
+}
+
+.cf-b {
+  grid-area: b;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: last baseline;
+  gap: 1.5cqw 5cqw;
+}
+
+.cf-n {
+  flex: 1 1 0;
+  min-width: min(min-content, 100%);
+  overflow-wrap: break-word;
+  font-family: var(--font-display);
+  font-size: max(20px, 5.4cqw);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+  color: var(--color-diploma);
+  filter: url(#cf-press);
+}
+
+.cf-k {
+  white-space: nowrap;
+}
+
+.cf-s {
+  margin-left: auto;
+  font-size: max(11px, 3.1cqw);
+  line-height: 1.25;
+  text-align: right;
+  white-space: nowrap;
+  filter: url(#cf-press-sm);
+}
+
+.cf-l {
+  display: block;
+  margin-bottom: 0.5cqw;
+  font-size: max(14px, 3.35cqw);
+  color: color-mix(in srgb, var(--color-diploma) 66%, transparent);
+}
+
+.cf-v {
+  font-family: var(--font-display);
+  font-size: max(16px, 3.8cqw);
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-diploma);
+}
+
+.cf-w {
+  grid-area: w;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: max(14px, 3.35cqw);
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.005em;
+  color: color-mix(in srgb, var(--color-diploma) 86%, transparent);
+  filter: url(#cf-press-sm);
+}
+
+.cf-gt {
+  display: inline-block;
+  height: 0.9em;
+  aspect-ratio: 414.8 / 66.92;
+  vertical-align: -0.194em;
+  background: currentColor;
+  mask: url("/assets/logos/gt-wordmark.svg") center / 100% 100% no-repeat;
+}
+
+.you {
+  --lw: clamp(168px, 14vw, 196px);
+  --side: clamp(336px, 31vw, 448px);
+  --side-gap: clamp(48px, 6vw, 96px);
+  --chip: var(--spacing-control-sm);
+  --muted: color-mix(in srgb, var(--color-diploma) 70%, transparent);
+  --muted-lift: color-mix(in srgb, var(--color-diploma) 80%, transparent);
+  --faint: color-mix(in srgb, var(--color-diploma) 64%, transparent);
+  --gap-tight: 12px;
+  --gap-group: 32px;
+  --gap-section: 48px;
+  min-height: 100dvh;
+  overflow-x: clip;
+  background: var(--color-blue-bright);
+}
+
+html:has(.you) {
+  scroll-padding-block: 16px;
+}
+
+@media (pointer: coarse) {
+  .you {
+    --chip: max(var(--spacing-control-touch), var(--spacing-control-sm));
+  }
+}
+
+.you main {
+  padding: var(--spacing-page) var(--spacing-edge) 96px;
+}
+
+.you .lb {
+  display: grid;
+  grid-template-columns: var(--side) minmax(0, 1fr);
+  column-gap: var(--side-gap);
+  align-items: start;
+}
+
+.you .lb > * {
+  min-width: 0;
+}
+
+.you .stay {
+  margin-top: var(--gap-section);
+}
+
+.you .kick {
+  margin: 0 0 var(--gap-tight);
+  font-family: var(--font-display);
+  font-size: var(--text-value);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--color-diploma);
+}
+
+.you .links {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.you .lnk {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "logo title out" "about about .";
+  align-items: center;
+  gap: 3px 10px;
+  min-height: 64px;
+  padding: 10px 16px;
+  border-radius: 20px;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.18s;
+}
+
+.you .links .lnk {
+  margin: 0 -16px;
+}
+
+.you .lnk .txt {
+  display: contents;
+}
+
+.you .lnk .txt > * {
+  display: block;
+}
+
+.you .lnk b {
+  grid-area: title;
+  font-family: var(--font-display);
+  font-size: var(--text-value);
+  font-weight: 600;
+  line-height: 1.3;
+  text-wrap: balance;
+}
+
+.you .lnk .txt > span {
+  grid-area: about;
+  font-size: var(--text-fine);
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.you .lnk .ic {
+  grid-area: out;
+  align-self: start;
+  margin-top: 2px;
+  opacity: 0.45;
+}
+
+.you .gp .row:focus-visible {
+  outline-offset: 2px;
+}
+
+@media (width < 1024px), (min-width: 1024px) and (560px <= height < 740px) {
+  .you .links {
+    display: grid;
+    padding: 4px;
+    border-radius: 24px;
+    background: color-mix(in srgb, var(--color-navy) 36%, transparent);
+  }
+
+  .you .links .lnk:focus-visible {
+    outline-offset: 2px;
+  }
+
+  @media (forced-colors: active) {
+    .you .links {
+      border: 1px solid transparent;
+    }
+  }
+}
+
+.you .lnk .st {
+  flex: none;
+  grid-area: logo;
+  align-self: start;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+}
+
+.you .lnk .short {
+  display: none;
+}
+
+@variant desk {
+  html:has(.you) {
+    scroll-padding-top: calc(var(--spacing-bar) + 16px);
+  }
+
+  .you .bar {
+    position: fixed;
+    background: var(--color-blue-bright);
+    pointer-events: auto;
+  }
+
+  @supports (animation-timeline: scroll()) {
+    .you .bar {
+      animation: you-bar-edge linear both;
+      animation-timeline: scroll();
+      animation-range: 0 16px;
+    }
+  }
+
+  .you .side {
+    position: sticky;
+    top: var(--spacing-page);
+  }
+
+  /* The space below the answers sits inside the grid row, so the pinned column can stay put to the page's end. */
+  .you main {
+    padding-bottom: 0;
+  }
+
+  .you .groups {
+    padding-bottom: 96px;
+  }
+}
+
+@keyframes you-bar-edge {
+  to {
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--color-navy) 36%, transparent);
+  }
+}
+
+@media (width < 720px), (min-width: 1024px) and (560px <= height < 740px) {
+  .you .links {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .you .links .lnk {
+    position: relative;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: "logo out" "word word";
+    align-content: space-between;
+    place-items: start;
+    gap: 6px 8px;
+    min-height: 76px;
+    margin: 0;
+    padding: 11px 10px 9px 12px;
+  }
+
+  .you .links .lnk .txt {
+    display: block;
+    @apply sr-only;
+  }
+
+  .you .links .lnk .st {
+    width: 30px;
+    height: 30px;
+    margin-top: 0;
+  }
+
+  .you .links .lnk .short {
+    grid-area: word;
+    display: block;
+    font-family: var(--font-display);
+    font-size: var(--text-label);
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+  }
+
+  .you .links .lnk .ic {
+    align-self: center;
+    width: 16px;
+    height: 16px;
+    margin-top: 0;
+  }
+}
+
+.you .ghost {
+  position: absolute;
+  inset: 0 0 auto;
+  padding: 4px;
+  pointer-events: none;
+}
+
+/* A ghost keeps the place its content had before the panel's inset changed. */
+.you .grp.open .ghost {
+  inset-inline: calc(-1 * var(--pad));
+}
+
+.you .grp:not(.open) .ghost {
+  inset-inline: var(--rp);
+}
+
+/* In a ghost the tapped row or field is blank, since what replaces it is already on screen. */
+.you .ghost .row.blank > * {
+  visibility: hidden;
+}
+
+.you .ghost .blank {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.you .ghost .blank::placeholder {
+  color: transparent;
+}
+
+.you .groups {
+  container-type: inline-size;
+}
+
+.you .grp {
+  --rp: 20px;
+  --fp: 22px;
+  --h1: 22px;
+  --pad: calc(var(--rp) + 4px);
+  --lc: calc(var(--lw) + 16px - var(--fp));
+  border-radius: 28px;
+  transition:
+    background-color 0.2s cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 0.2s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.you .grp + .grp {
+  margin-top: var(--gap-group);
+}
+
+.you .grp.open {
+  padding: var(--pad) var(--pad) calc(var(--pad) - 4px);
+  background: color-mix(in srgb, var(--color-diploma) 6%, transparent);
+  box-shadow: 0 14px 32px -18px color-mix(in srgb, var(--color-navy) 60%, transparent);
+  outline: 1px solid transparent;
+}
+
+.you .gh {
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--gap-tight);
+}
+
+.you .gh h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-value);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--color-diploma);
+  transform-origin: 0 100%;
+}
+
+.you .gh h2:focus {
+  outline: none;
+}
+
+.you .grp.open .gh {
+  margin-bottom: 16px;
+}
+
+.you .grp.open .gh h2 {
+  font-size: var(--h1);
+  letter-spacing: -0.015em;
+}
+
+.you .gp {
+  position: relative;
+  padding: 4px;
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--color-navy) 36%, transparent);
+  transition: background-color 0.18s;
+}
+
+.you .grp.open .gp {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.you .ed .row {
+  padding-inline: 0;
+}
+
+/* The career half not being edited keeps its rows, pulled out by their padding so the words line up with the fields. */
+.you .grp.open .sub.off .row {
+  width: calc(100% + 2 * var(--rp));
+  margin-inline: calc(-1 * var(--rp));
+}
+
+.you .grp.open [data-sub="resume"].off {
+  margin-bottom: var(--gap-group);
+}
+
+.you .grp.open [data-sub="links"].off {
+  margin-top: var(--gap-group);
+}
+
+.you .ed {
+  --spacing-field-pad: var(--fp);
+}
+
+/* Fields are the same solid navy on the lifted panel as on the page. */
+.you .grp.open .ed :is(input:not([type="file"]), select, .prefixed) {
+  background-color: color-mix(in srgb, var(--color-navy) 45%, var(--color-blue-bright));
+}
+
+.you .ed .prefixed {
+  height: var(--spacing-control);
+  padding-inline: var(--fp);
+  font-size: var(--text-control);
+}
+
+.you .grp.open .ed .prefixed > input {
+  background: none;
+}
+
+.you .grp.open :is(.lead, .hint, .why, .file, .row .k, .row .v.add, .file.none b) {
+  color: var(--muted-lift);
+}
+
+.you .pv {
+  margin: var(--gap-tight) calc(var(--rp) + 4px) 0;
+  font-size: var(--text-fine);
+  line-height: 1.45;
+  color: var(--muted);
+  text-wrap: pretty;
+}
+
+.you .grp.open .pv {
+  display: none;
+}
+
+.you .row {
+  display: grid;
+  grid-template-columns: var(--lw) minmax(0, 1fr) auto;
+  grid-template-areas: "k v c";
+  align-content: center;
+  align-items: baseline;
+  column-gap: 16px;
+  width: 100%;
+  min-height: 56px;
+  padding: 17px var(--rp);
+  border-radius: 20px;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.15s;
+}
+
+/* Focus goes back to the row after a close, and its ring shows only for someone using the keyboard. */
+.you.pointer .row:focus-visible {
+  outline: none;
+}
+
+.you .row .k {
+  grid-area: k;
+  font-size: var(--text-label);
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.you .row .v {
+  grid-area: v;
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: var(--text-value);
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.005em;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.you .row .v.add {
+  color: var(--faint);
+}
+
+.you .row .chev {
+  grid-area: c;
+  align-self: center;
+  opacity: 0.45;
+}
+
+.you .row .ok {
+  grid-area: c;
+  align-self: center;
+}
+
+.you .row:has(> .ok:not([hidden])) > .chev {
+  display: none;
+}
+
+.you .row.locked {
+  grid-template-columns: var(--lw) minmax(0, 1fr);
+  grid-template-areas: "k v" ". w";
+  row-gap: 2px;
+  padding-block: 10px 11px;
+  cursor: default;
+}
+
+.you .why {
+  grid-area: w;
+  font-size: var(--text-fine);
+  line-height: 1.4;
+  color: var(--muted);
+  text-wrap: pretty;
+}
+
+.you .ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-size: var(--text-label);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--color-burdell);
+}
+
+.you .ok .ic {
+  width: 16px;
+  height: 16px;
+}
+
+.you .ok[hidden] {
+  display: none;
+}
+
+.you .lead {
+  max-width: 62ch;
+  margin: 0 0 16px;
+  font-size: var(--text-label);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.you .f {
+  display: grid;
+  grid-template-columns: var(--lc) minmax(0, 560px);
+  align-items: center;
+  min-height: var(--spacing-control);
+}
+
+@container (min-width: 520px) {
+  .you .f + .f {
+    margin-top: 16px;
+  }
+}
+
+.you .f > .k {
+  padding: 0 12px 0 0;
+  font-size: var(--text-label);
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--color-diploma);
+  text-wrap: balance;
+}
+
+.you .f.tall {
+  align-items: start;
+}
+
+.you .f.tall > .k {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: var(--chip);
+}
+
+.you .f > .k .ks {
+  display: block;
+  font-weight: 400;
+  color: var(--muted-lift);
+}
+
+.you .f .ctl,
+.you .f .err {
+  grid-column: 2;
+  min-width: 0;
+}
+
+.you .pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.you .ed input:not([type="file"]),
+.you .ed select {
+  display: block;
+  margin: 0;
+  text-overflow: ellipsis;
+}
+
+.you .ed select {
+  cursor: pointer;
+}
+
+.you .busy .f {
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.you .err {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 16px 0 4px;
+  font-size: var(--text-message);
+  line-height: 1.5;
+}
+
+.you .err[hidden] {
+  display: none;
+}
+
+.you .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.you .chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--chip);
+  padding: 7px 18px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-diploma) 13%, transparent);
+  font-family: var(--font-display);
+  font-size: var(--text-label);
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.025em;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 0.18s,
+    color 0.18s;
+}
+
+.you .chip.quiet {
+  color: color-mix(in srgb, var(--color-diploma) 86%, transparent);
+}
+
+.you .chip:not(:disabled, [aria-pressed="true"], [aria-checked="true"]):active {
+  background: color-mix(in srgb, var(--color-diploma) 24%, transparent);
+}
+
+.you .chip:is([aria-pressed="true"], [aria-checked="true"]) {
+  background: var(--color-diploma);
+  color: var(--color-navy);
+}
+
+.you .chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.you .solid {
+  @apply btn-solid;
+  display: inline-flex;
+  width: auto;
+  min-width: 112px;
+  height: var(--spacing-control);
+  padding: 0 var(--fp);
+  font-size: var(--text-control);
+  line-height: 1;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.you .q {
+  @apply btn-quiet;
+  display: inline-flex;
+  min-height: var(--spacing-control-touch);
+  padding: 0 18px;
+  font-size: var(--text-control);
+  line-height: 1;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  transition:
+    background-color 0.18s,
+    scale 0.1s;
+}
+
+.you .q:not(:disabled):active {
+  background: color-mix(in srgb, var(--color-diploma) 13%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .you .q:not(:disabled):active {
+    scale: 0.97;
+  }
+}
+
+/* Save stays in the flow, not sticky, because iOS anchors sticky elements to a layout area that slides behind the
+   keyboard. */
+.you .act {
+  display: grid;
+  grid-template-columns: var(--lc) minmax(0, 560px);
+  padding: 24px 0 4px;
+}
+
+.you .act > * {
+  grid-column: 2;
+  min-width: 0;
+}
+
+.you .act .err {
+  margin: 0 0 14px;
+}
+
+.you .fa {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.you .fa .q {
+  height: var(--spacing-control);
+}
+
+.you :is(.ask, .confirm) p {
+  margin: 0 0 14px;
+  font-size: var(--text-control);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.you .confirm {
+  margin-top: 12px;
+}
+
+.you .confirm .fa,
+.you .f .ctl > .fa {
+  justify-content: flex-start;
+}
+
+.you .file {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  min-height: var(--chip);
+  padding-top: 9px;
+  padding-inline-start: var(--fp);
+  font-size: var(--text-label);
+}
+
+.you .f:is([data-keys="resume"], [data-keys="book"]) .hint {
+  padding-inline-start: var(--fp);
+}
+
+.you .file .ok {
+  align-self: center;
+}
+
+.you .file b {
+  font-family: var(--font-display);
+  font-size: var(--text-value);
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--color-diploma);
+}
+
+.you .file.none b {
+  color: var(--faint);
+}
+
+.you .file + .fa {
+  margin-top: 12px;
+}
+
+.you .hint {
+  margin-top: 10px;
+  font-size: var(--text-fine);
+  line-height: 1.45;
+}
+
+.you .chips + .hint {
+  margin-top: 12px;
+}
+
+.you .after {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.you .bk {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  font-family: var(--font-display);
+  font-size: var(--text-label);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--muted-lift);
+}
+
+.you .bk .ok {
+  font: inherit;
+}
+
+.you .spin {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid color-mix(in srgb, var(--color-diploma) 25%, transparent);
+  border-top-color: var(--color-diploma);
+  border-radius: 50%;
+  animation: you-spin 0.8s linear infinite;
+}
+
+@keyframes you-spin {
+  to {
+    rotate: 1turn;
+  }
+}
+
+@container (max-width: 519px) {
+  .you .grp {
+    --rp: 16px;
+    --fp: 16px;
+    --h1: 17px;
+  }
+
+  .you .grp.open .gh {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    margin: calc(-1 * var(--pad)) calc(-1 * var(--pad)) 10px;
+    padding: var(--pad) var(--pad) 8px;
+    border-radius: 28px 28px 0 0;
+    background: color-mix(in srgb, var(--color-diploma) 6%, var(--color-blue-bright));
+  }
+
+  .you .grp.open .gh::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    inset-inline: 0;
+    height: 16px;
+    background: linear-gradient(
+      color-mix(in srgb, var(--color-diploma) 6%, var(--color-blue-bright)),
+      transparent
+    );
+    pointer-events: none;
+  }
+
+  /* While the keyboard is up the heading scrolls with the form, since iOS slides sticky elements behind the
+     keyboard. */
+  @media (pointer: coarse) {
+    :root:has(input:not([type="file"]):focus) .you .grp.open .gh {
+      position: relative;
+    }
+  }
+
+  .you .row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "k c" "v c";
+    row-gap: 2px;
+    min-height: 64px;
+    padding-block: 11px 12px;
+  }
+
+  .you .row .k {
+    font-size: var(--text-fine);
+  }
+
+  .you .row .v {
+    font-size: var(--text-control);
+  }
+
+  .you .row.locked {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "k" "v" "w";
+  }
+
+  .you .ed .row.locked {
+    min-height: 0;
+    padding: 6px 0 0;
+  }
+
+  .you .f {
+    display: block;
+    min-height: 0;
+    margin-top: 24px;
+  }
+
+  .you .ed > :first-child {
+    margin-top: 6px;
+  }
+
+  .you .f > .k {
+    display: block;
+    margin-bottom: 8px;
+    padding: 0;
+    line-height: 1.3;
+  }
+
+  .you .f.tall > .k {
+    display: block;
+    min-height: 0;
+  }
+
+  .you .lead {
+    margin: 2px 0 0;
+    font-size: var(--text-fine);
+  }
+
+  /* Answer groups sit a little closer, so Your background's four questions fit one screen at 390. */
+  .you .f.tall + .f.tall {
+    margin-top: 20px;
+  }
+
+  .you .chips {
+    gap: 8px;
+  }
+
+  /* Narrow enough that Yes, No and Prefer not to answer still share one line from 375px. */
+  .you .chip {
+    padding-inline: 14px;
+  }
+
+  .you .act {
+    display: block;
+  }
+
+  .you .act .fa {
+    flex-wrap: nowrap;
+  }
+
+  .you .act .fa .solid {
+    flex: 1 1 0;
+  }
+
+  .you .act .ask .fa {
+    flex-wrap: wrap;
+  }
+
+  .you .ask .fa .q {
+    flex: 1 1 0;
+    padding: 0 8px;
+  }
+
+  .you .ask .fa .solid {
+    flex: 1 1 100%;
+  }
+
+  .you .file {
+    min-height: 0;
+    padding-top: 0;
+  }
+}
+
+@container (max-width: 300px) {
+  .you .pair {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (width < 1024px) {
+  .you .lb {
+    display: block;
+  }
+
+  .you .groups {
+    margin-top: var(--gap-section);
+  }
+}
+
+@variant short {
+  .you .cf-host {
+    max-width: max(272px, calc((100svh - var(--spacing-bar) - 56px) * 440 / 277));
+  }
+}
+
+@media (576px <= width < 1024px) {
+  .you .side {
+    display: grid;
+    grid-template-columns: minmax(0, 448px) minmax(128px, 1fr);
+    gap: 16px;
+  }
+
+  .you .stay {
+    display: flex;
+    flex-direction: column;
+    margin-top: 0;
+  }
+
+  .you .links {
+    flex: 1;
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: 1fr;
+  }
+
+  .you .links li {
+    display: flex;
+  }
+
+  .you .lnk {
+    flex: 1;
+  }
+}
+
+@media (576px <= width < 720px) {
+  .you .links .lnk {
+    align-content: center;
+    row-gap: 4px;
+    min-height: 64px;
+    padding: 7px 10px 7px 12px;
+  }
+}
+
+@media (720px <= width < 1024px) {
+  .you .side {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 32px;
+  }
+
+  .you .links .lnk {
+    display: flex;
+    gap: 12px;
+    min-height: 48px;
+    margin: 0;
+    padding: 4px 14px;
+  }
+
+  .you .links .lnk .txt {
+    display: block;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .you .links .lnk .txt > span {
+    @apply sr-only;
+  }
+
+  .you .links .lnk .st {
+    align-self: auto;
+    width: 28px;
+    height: 28px;
+    margin-top: 0;
+  }
+
+  .you .links .lnk .ic {
+    align-self: auto;
+    margin-top: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .you main {
+    padding: var(--spacing-page) var(--spacing-edge) 128px;
+  }
+
+  .you:has(.grp.open):not(:has(.back[data-on])) main {
+    padding-bottom: 32px;
+  }
+
+  .you {
+    --gap-section: 40px;
+  }
+
+  .you:has(.grp.open) .pages-dock {
+    translate: -50% 160%;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity 0.22s,
+      translate 0.4s var(--ease-move),
+      visibility 0s linear 0.4s;
+  }
+}
+
+@media (hover: hover) {
+  .you .lnk:hover:not(:active),
+  .you button.row:hover:not(:active) {
+    background: color-mix(in srgb, var(--color-diploma) 5%, transparent);
+  }
+
+  .you .chip:not([aria-pressed="true"], [aria-checked="true"], :disabled):hover:not(:active) {
+    background: color-mix(in srgb, var(--color-diploma) 19%, transparent);
+  }
+
+  .you .solid[aria-busy="true"]:hover {
+    background: var(--color-diploma);
+  }
+}
+
+.you button.row:active,
+.you button.row.press,
+.you .lnk:active {
+  background: color-mix(in srgb, var(--color-diploma) 8%, transparent);
+}
+
+/* In forced colours a transparent border shows as an edge, standing in for the fills and tints. */
+@media (forced-colors: active) {
+  .you .grp:not(.open) .gp,
+  .you .solid,
+  .you .chip,
+  .you .back,
+  .you .ed :is(input:not([type="file"]), select) {
+    border: 1px solid transparent;
+  }
+
+  .you .chip:is([aria-pressed="true"], [aria-checked="true"]) {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  /* The card is art, so it keeps its own cream on navy in every theme. */
+  .cf {
+    forced-color-adjust: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .you *,
+  .you *::before,
+  .you *::after,
+  .pages-dock {
+    transition: none !important;
+  }
+}

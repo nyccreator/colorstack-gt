@@ -1,20 +1,15 @@
-import {
-  type CSSProperties,
-  type InputHTMLAttributes,
-  type KeyboardEvent,
-  useLayoutEffect,
-  useRef,
-} from "react";
+import { type InputHTMLAttributes, type KeyboardEvent, useLayoutEffect, useRef } from "react";
 
 import { ENTER, still } from "@/lib/motion";
 
-// A first name in a title never breaks mid-word: one too long for the line sets itself smaller, sized from the title's
-// width (the title is the size container).
+import type { Option } from "./options";
+
+// Only works inside an @container title, whose width shrinks a name too long for the line instead of breaking it.
 export function FirstName({ name }: { name: string }) {
   return (
     <span
       className="text-[min(1em,calc(200cqi/var(--n)))] whitespace-nowrap hyphens-none"
-      style={{ "--n": Math.max(name.length, 1) } as CSSProperties}
+      style={{ "--n": Math.max(name.length, 1) }}
     >
       {name}
     </span>
@@ -22,20 +17,16 @@ export function FirstName({ name }: { name: string }) {
 }
 
 export const inlineLink = "border-b border-current pb-px text-diploma hover:text-burdell";
-// A main button pinned to the bottom of the screen, under a fade that shows when answers run on beneath it. It sits as
-// far from the foot as the Events and You dock.
 export const pin =
-  "fixed inset-x-0 bottom-0 z-30 bg-blue-bright px-edge pt-3 pb-6 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-6 before:bg-linear-to-t before:from-blue-bright before:to-blue-bright/0";
+  "fixed inset-x-0 bottom-0 z-30 bg-blue-bright px-edge pt-3 pb-foot before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-6 before:bg-linear-to-t before:from-blue-bright before:to-blue-bright/0";
+export const progressRoom = "mb-5 h-12 roomy:mb-7";
 
 export function Tick({ className = "" }: { className?: string }) {
   return <i aria-hidden className={`ic tick ${className}`} />;
 }
 
-type Option<T extends string> = { value: T; label: string };
-
-// Two columns keep the text where single answers have it and give a long label the circle's side instead.
 export const answer = (on: boolean, quiet = false, wide = false) =>
-  `flex h-control-lg w-full cursor-pointer items-center justify-between rounded-full pl-5 text-left type-heading text-subtitle tracking-tight transition-[background-color,color] duration-180 roomy:pl-8 ${
+  `flex h-control-lg w-full cursor-pointer items-center justify-between rounded-full pl-5 text-left type-display text-subtitle tracking-tight transition-[background-color,color] duration-180 roomy:pl-8 ${
     wide ? "gap-2 pr-5.5 roomy:pr-4" : "gap-3 pr-5.5"
   } ${
     on
@@ -56,7 +47,6 @@ export function Ring({ on }: { on: boolean }) {
   );
 }
 
-// The site's address stays in front of the field, so the member types only the name after it.
 export function Prefixed({
   prefix,
   className = "",
@@ -70,7 +60,6 @@ export function Prefixed({
   );
 }
 
-// One answer is a radio group: one tab stop, and the arrow keys move the choice without moving on.
 function arrows<T extends string>(
   event: KeyboardEvent<HTMLButtonElement>,
   i: number,
@@ -136,8 +125,7 @@ export function Rows<T extends string>({
   );
 }
 
-// Several answers are toggle buttons; `single` makes the set a radio group. A chip keeps its tick's room either way, so
-// choosing one never reflows the set under the next tap.
+// A chip's padding off equals its padding on plus the tick, so choosing one never reflows the set under the next tap.
 export function Chips<T extends string>({
   id,
   labelledBy,
@@ -185,7 +173,7 @@ export function Chips<T extends string>({
                 }
               : { "aria-pressed": on })}
             onClick={() => onToggle(option.value)}
-            className={`inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full py-2 text-left type-heading text-base tracking-tight transition-[background-color,color] duration-180 roomy:min-h-12 roomy:text-lg ${
+            className={`inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full py-2 text-left type-display text-base tracking-tight transition-[background-color,color] duration-180 roomy:min-h-12 roomy:text-lg ${
               on
                 ? "bg-diploma pr-4 pl-3 text-navy roomy:pr-5 roomy:pl-3.5"
                 : `bg-diploma/13 px-6.75 hover:bg-diploma/19 hover:text-diploma active:bg-diploma/24 roomy:px-7.5 ${option.value === quiet ? "text-diploma/86" : "text-diploma"}`
@@ -220,7 +208,6 @@ export function Progress({
   bare?: boolean;
 }) {
   const fill = useRef<HTMLDivElement>(null);
-  // The bar glides from where the last question left it.
   useLayoutEffect(() => {
     if (from === at || from < 1 || still()) return;
     fill.current?.animate(
@@ -228,12 +215,11 @@ export function Progress({
       { duration: 300, easing: ENTER },
     );
   }, [at, from, total]);
-  // Questions keep the back arrow's room even where there is none, so the bar stays put between them; a list never has
-  // one, so its bar runs the column's width.
+  // The arrow is invisible rather than absent, so the bar doesn't shift between questions.
   return (
     <div
       data-progress
-      className={`mb-5 flex h-12 items-center gap-3.5 roomy:mb-7 ${bare ? "" : "-ml-3.5"}`}
+      className={`${progressRoom} flex items-center gap-3.5 ${bare ? "" : "-ml-3.5"}`}
     >
       {bare ? null : (
         <button

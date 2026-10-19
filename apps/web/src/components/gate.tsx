@@ -1,21 +1,22 @@
-import { api } from "@colorstack-gt/backend/convex/_generated/api";
 import {
   OTP_ALLOWED_ATTEMPTS,
   OTP_LENGTH,
   RESEND_COOLDOWN_SECONDS,
 } from "@colorstack-gt/backend/convex/lib/config";
 import { isGeorgiaTechEmail, normalizeEmail } from "@colorstack-gt/backend/convex/lib/identity";
+import { MESSAGES } from "@colorstack-gt/backend/convex/lib/messages";
 import { Link, useNavigate, useRouter } from "@tanstack/react-router";
-import { type ConvexReactClient, useConvex } from "convex/react";
+import { useConvex } from "convex/react";
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 
 import { authClient } from "@/lib/auth-client";
 import { useSlow } from "@/lib/motion";
-import { forgetSession } from "@/lib/session";
+import { landing, signedIn } from "@/lib/session";
 
 import { Bar } from "./frame";
 import { Message } from "./message";
+import { progressRoom } from "./onboarding/controls";
 
 const COPY = {
   "sign-in": {
@@ -34,20 +35,13 @@ const COPY = {
 
 const TRIES = ["No tries", "One try", "Two tries", "Three tries"];
 
-export const solid =
-  "flex h-control-lg w-full cursor-pointer items-center justify-center rounded-full bg-diploma type-nav text-navy [transition:background-color_180ms,scale_100ms] not-disabled:hover:bg-burdell motion-safe:not-disabled:active:scale-97 aria-busy:cursor-wait disabled:not-aria-busy:cursor-not-allowed disabled:not-aria-busy:bg-diploma/16 disabled:not-aria-busy:text-diploma/64";
-// Onboarding's fields are the gate's size.
 export const field = "h-control-lg px-5 text-subtitle roomy:px-8";
-export const quiet =
-  "flex min-h-12 cursor-pointer items-center justify-center rounded-full px-link-x py-2 text-center type-nav text-diploma transition-[background-color] hover:bg-diploma/13 disabled:cursor-default disabled:text-diploma/45 disabled:hover:bg-transparent";
 
 export const gateSearch = z.object({
   email: z.string().optional().catch(undefined),
   sent: z.boolean().optional().catch(undefined),
+  redirect: z.string().optional().catch(undefined),
 });
-
-export const NO_EMAIL = "Enter your Georgia Tech email.";
-export const WRONG_DOMAIN = "Use your @gatech.edu email.";
 
 const store = {
   get: (key: string) => {
@@ -74,6 +68,7 @@ export async function sendCode(email: string): Promise<string | null> {
     store.set(`gate-sent:${email}`, Date.now());
     return null;
   }
+  if (result?.error.status === 400) return MESSAGES.wrongDomain;
   return result?.error.status === 429
     ? "Too many requests. Wait a minute and try again."
     : "We couldn't send a code. Try again.";
@@ -84,35 +79,10 @@ const triesUsed = (email: string) => store.get(`gate-tries:${email}`);
 const saveTriesUsed = (email: string, used: number | null) =>
   store.set(`gate-tries:${email}`, used);
 
-// A reload or a step back keeps counting down from when the code was sent, not from the start.
 function cooldownLeft(email: string) {
   const sent = store.get(`gate-sent:${email}`);
   if (!sent) return RESEND_COOLDOWN_SECONDS;
   return Math.max(0, RESEND_COOLDOWN_SECONDS - Math.floor((Date.now() - sent) / 1000));
-}
-
-// Onboarding opens on the member and their private answers. Watching both while Verifying… still shows, and for a
-// moment after, lets its first screen arrive with them instead of a blank page.
-function hold(convex: ConvexReactClient) {
-  const watches = [
-    convex.watchQuery(api.members.me),
-    convex.watchQuery(api.members.myDemographics),
-  ];
-  const ready = () => {
-    try {
-      return (
-        Boolean(watches[0]!.localQueryResult()) && watches[1]!.localQueryResult() !== undefined
-      );
-    } catch {
-      return true;
-    }
-  };
-  return new Promise<void>((resolve) => {
-    const stops = watches.map((watch) => watch.onUpdate(() => ready() && resolve()));
-    if (ready()) resolve();
-    setTimeout(resolve, 4000);
-    setTimeout(() => stops.forEach((stop) => stop()), 10_000);
-  });
 }
 
 // The boxes only grow and shrink at the end, so edits land there wherever the hidden caret is.
@@ -167,12 +137,14 @@ function EmailStep({
   email,
   setEmail,
   focus,
+  redirect,
   onSent,
 }: {
   variant: keyof typeof COPY;
   email: string;
   setEmail: (value: string) => void;
   focus: boolean;
+  redirect?: string;
   onSent: (email: string) => void;
 }) {
   const copy = COPY[variant];
@@ -182,7 +154,7 @@ function EmailStep({
   const [pending, setPending] = useState(false);
   const slow = useSlow(pending);
 
-  // With a mouse, the screen's one field takes focus; a phone's keyboard waits for a tap.
+  // Only a fine pointer focuses the field on arrival, so a phone's keyboard doesn't open unasked.
   useEffect(() => {
     if (!focus && matchMedia("(pointer: fine)").matches) input.current?.focus();
   }, [focus]);
@@ -190,7 +162,7 @@ function EmailStep({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!email.trim() || !isGeorgiaTechEmail(email)) {
-      setInvalid(email.trim() ? WRONG_DOMAIN : NO_EMAIL);
+      setInvalid(email.trim() ? MESSAGES.wrongDomain : MESSAGES.noEmail);
       input.current?.focus();
       return;
     }
@@ -251,18 +223,18 @@ function EmailStep({
           type="submit"
           disabled={pending}
           aria-busy={pending || undefined}
-          className={`mt-4 ${solid}`}
+          className="mt-4 btn-solid"
         >
           {slow ? "Sending…" : "Send code"}
         </button>
       </form>
 
       <Links>
-        <Link to={copy.other.to} className={quiet}>
+        <Link to={copy.other.to} search={{ redirect }} className="btn-quiet">
           <Prompt prompt={copy.prompt} action={copy.other.label} />
         </Link>
-        {invalid === WRONG_DOMAIN ? (
-          <a href="mailto:colorstackgt@gmail.com" className={quiet}>
+        {invalid === MESSAGES.wrongDomain ? (
+          <a href="mailto:colorstackgt@gmail.com" className="btn-quiet">
             <Prompt prompt="Partner company?" action="Email us" />
           </a>
         ) : null}
@@ -271,7 +243,15 @@ function EmailStep({
   );
 }
 
-function CodeStep({ email, onChangeEmail }: { email: string; onChangeEmail: () => void }) {
+function CodeStep({
+  email,
+  redirect,
+  onChangeEmail,
+}: {
+  email: string;
+  redirect?: string;
+  onChangeEmail: () => void;
+}) {
   const router = useRouter();
   const navigate = useNavigate();
   const convex = useConvex();
@@ -285,13 +265,16 @@ function CodeStep({ email, onChangeEmail }: { email: string; onChangeEmail: () =
   const [pending, setPending] = useState(false);
   const [sending, setSending] = useState(false);
   const [resent, setResent] = useState(false);
-  const [cooldown, setCooldown] = useState(() => cooldownLeft(email));
+  // The server and the client render the same first frame; the tab's own cooldown is read once mounted.
+  const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_SECONDS);
   const [error, setError] = useState<string | null>(null);
   const verifying = useSlow(pending);
   const resending = useSlow(sending);
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- The tab's own tries and cooldown are known only once mounted.
     if (triesUsed(email) >= OTP_ALLOWED_ATTEMPTS) setRetired("used");
+    setCooldown(cooldownLeft(email));
   }, [email]);
 
   useEffect(() => {
@@ -305,10 +288,8 @@ function CodeStep({ email, onChangeEmail }: { email: string; onChangeEmail: () =
     setError(null);
     const result = await authClient.signIn.emailOtp({ email, otp }).catch(() => null);
     if (result && !result.error) {
-      forgetSession();
-      await router.invalidate();
-      await hold(convex);
-      await navigate({ to: "/onboarding" });
+      await signedIn(router, convex);
+      await navigate({ href: landing(redirect) });
       return;
     }
 
@@ -353,7 +334,7 @@ function CodeStep({ email, onChangeEmail }: { email: string; onChangeEmail: () =
   }
 
   const changeEmail = (
-    <button type="button" onClick={onChangeEmail} className={quiet}>
+    <button type="button" onClick={onChangeEmail} className="btn-quiet">
       Change email
     </button>
   );
@@ -376,7 +357,7 @@ function CodeStep({ email, onChangeEmail }: { email: string; onChangeEmail: () =
           disabled={sending}
           aria-busy={sending || undefined}
           aria-describedby="gate-title gate-line"
-          className={`mt-6 roomy:mt-8 ${solid}`}
+          className="mt-6 roomy:mt-8 btn-solid"
         >
           {resending ? "Sending…" : "Send new code"}
         </button>
@@ -387,7 +368,6 @@ function CodeStep({ email, onChangeEmail }: { email: string; onChangeEmail: () =
   }
 
   const current = Math.min(code.length, OTP_LENGTH - 1);
-  // The resend link keeps the width of its longest label, so Change email beside it never shifts as it counts down.
   const resendLabel =
     cooldown > 0 ? `Resend in ${cooldown}s` : resending ? "Sending…" : "Resend code";
 
@@ -402,7 +382,6 @@ function CodeStep({ email, onChangeEmail }: { email: string; onChangeEmail: () =
         }
       />
 
-      {/* Verify stays enabled: pressed early it says what's missing, and a wrong code is never sent twice. */}
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -412,6 +391,7 @@ function CodeStep({ email, onChangeEmail }: { email: string; onChangeEmail: () =
             input.current?.focus();
             return;
           }
+          // A code already marked wrong isn't sent again, since every send spends a try.
           if (wrong) return input.current?.select();
           void verify(code);
         }}
@@ -476,7 +456,7 @@ function CodeStep({ email, onChangeEmail }: { email: string; onChangeEmail: () =
           type="submit"
           disabled={pending}
           aria-busy={pending || undefined}
-          className={`mt-4 ${solid}`}
+          className="mt-4 btn-solid"
         >
           {verifying ? "Verifying…" : "Verify code"}
         </button>
@@ -487,7 +467,7 @@ function CodeStep({ email, onChangeEmail }: { email: string; onChangeEmail: () =
           type="button"
           onClick={resend}
           disabled={sending || cooldown > 0}
-          className={`${quiet} grid tabular-nums`}
+          className="btn-quiet grid tabular-nums"
         >
           <span aria-hidden className="invisible col-start-1 row-start-1">
             Resend in {RESEND_COOLDOWN_SECONDS}s
@@ -504,27 +484,30 @@ export function Gate({
   variant,
   email: initial = "",
   sent = false,
+  redirect,
 }: {
   variant: keyof typeof COPY;
   email?: string;
   sent?: boolean;
+  redirect?: string;
 }) {
   const navigate = useNavigate();
   const { path } = COPY[variant];
   const [email, setEmail] = useState(initial);
   const sentTo = sent && isGeorgiaTechEmail(initial) ? normalizeEmail(initial) : null;
 
-  // The title sits where onboarding's questions put theirs, so signing in hands over without the title moving.
   return (
-    <div className="min-h-dvh bg-blue-bright px-edge pt-title pb-10 roomy:pb-16">
+    <div className="min-h-dvh bg-blue-bright px-edge pt-anchor pb-10 roomy:pb-16">
       <Bar />
       <main className="mx-auto w-full max-w-gate">
+        <div aria-hidden className={progressRoom} />
         {sentTo ? (
           <CodeStep
             key={sentTo}
             email={sentTo}
+            redirect={redirect}
             onChangeEmail={() =>
-              void navigate({ to: path, search: { email: sentTo }, replace: true })
+              void navigate({ to: path, search: { email: sentTo, redirect }, replace: true })
             }
           />
         ) : (
@@ -534,8 +517,9 @@ export function Gate({
               email={email}
               setEmail={setEmail}
               focus={Boolean(initial)}
+              redirect={redirect}
               onSent={(address) =>
-                void navigate({ to: path, search: { email: address, sent: true } })
+                void navigate({ to: path, search: { email: address, sent: true, redirect } })
               }
             />
           </div>
