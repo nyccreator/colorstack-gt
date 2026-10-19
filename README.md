@@ -62,7 +62,6 @@ a working credential and does not belong in a deployment's logs.
 ```
 apps/web            pages, components, design system
 packages/backend    database schema and server functions
-packages/ui         shared component primitives
 packages/env        environment variable validation
 packages/infra      deployment
 ```

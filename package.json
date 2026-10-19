@@ -11,17 +11,15 @@
       "zod": "^4.4.3",
       "typescript": "^6.0.3",
       "@types/node": "^26.2.0",
-      "lucide-react": "^1.27.0",
-      "next-themes": "^0.4.6",
       "react": "^19.2.8",
       "react-dom": "^19.2.8",
-      "sonner": "^2.0.7",
       "tailwindcss": "^4.3.3",
       "convex": "^1.45.0",
       "better-auth": "1.6.17",
       "@convex-dev/better-auth": "^0.12.5",
       "@types/react": "^19.2.17",
-      "@types/react-dom": "^19.2.3"
+      "@types/react-dom": "^19.2.3",
+      "vite": "^8.1.5"
     }
   },
   "type": "module",
@@ -29,18 +27,12 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "check-types": "turbo run check-types",
-    "dev:web": "turbo run dev -F web --",
     "dev:server": "turbo run dev -F @colorstack-gt/backend --",
     "dev:setup": "turbo run dev:setup -F @colorstack-gt/backend --",
     "deploy": "turbo run deploy -F @colorstack-gt/infra --",
     "destroy": "turbo run destroy -F @colorstack-gt/infra --",
     "check": "oxlint && oxfmt --write",
     "check:ci": "oxlint && oxfmt --check"
-  },
-  "dependencies": {
-    "@colorstack-gt/env": "workspace:*",
-    "dotenv": "catalog:",
-    "zod": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260728.1",
