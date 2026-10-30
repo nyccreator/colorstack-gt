@@ -1,7 +1,7 @@
 import { type MouseEvent, type Ref, useLayoutEffect, useRef, useState } from "react";
 
-import type { ClubEvent } from "./data";
-import { Actions, monthOf, Picture, SHORT, tileShape } from "./detail";
+import { type ClubEvent, isPast } from "./data";
+import { Actions, Picture, shortOf, tileShape } from "./detail";
 
 const CAPTION_WIDTH = 136;
 
@@ -16,6 +16,7 @@ function Tile({
   event,
   w,
   h,
+  now,
   next,
   on,
   tag,
@@ -24,38 +25,44 @@ function Tile({
   event: ClubEvent;
   w: number;
   h: number;
+  now: number;
   next: boolean;
   on: boolean;
   tag: boolean;
   onPick: (id: string) => void;
 }) {
   const href = `/hub?event=${encodeURIComponent(event.id)}`;
+  const past = isPast(event, now);
   const pick = (e: MouseEvent) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
     onPick(event.id);
   };
   return (
-    <article className={on ? "t on" : "t"} style={{ width: w }} data-event={event.id}>
+    <article
+      className={`t${on ? " on" : ""}${past ? " past" : ""}`}
+      style={{ width: w }}
+      data-event={event.id}
+    >
       <a
         className="pick"
         href={href}
-        aria-label={event.title}
+        aria-label={past ? `Past event: ${event.title}` : event.title}
         aria-current={on || undefined}
         onClick={pick}
       >
-        <Picture event={event} width={w} height={h} lazy>
+        <Picture event={event} width={w} height={h} lazy past={past}>
           {tag ? <span className="nextup">Next up</span> : null}
         </Picture>
       </a>
       <div className="cap">
         <span className="meta">
-          {next ? <em>{SHORT.format(event.startsAt)}</em> : SHORT.format(event.startsAt)}
+          {next ? <em>{shortOf(event.startsAt, now)}</em> : shortOf(event.startsAt, now)}
         </span>
         <a className="ct" href={href} tabIndex={-1} aria-hidden onClick={pick}>
           {event.title}
         </a>
-        <Actions event={event} mode="tile" />
+        <Actions event={event} mode="tile" now={now} />
       </div>
     </article>
   );
@@ -116,6 +123,8 @@ export function Gallery({
   now,
   next,
   selected,
+  group,
+  fill,
   onPick,
   ...grid
 }: Grid & {
@@ -123,6 +132,8 @@ export function Gallery({
   now: number;
   next?: ClubEvent;
   selected?: ClubEvent;
+  group: (t: number) => string;
+  fill?: boolean;
   onPick: (id: string) => void;
 }) {
   const captionRuler = useRef<HTMLDivElement>(null);
@@ -146,17 +157,18 @@ export function Gallery({
       event={e}
       w={wide(e)}
       h={row}
+      now={now}
       next={e === next}
       on={e === selected}
       tag={!selected && e === next}
       onPick={onPick}
     />
   );
-  const months: [string, ClubEvent[]][] = [];
+  const groups: [string, ClubEvent[]][] = [];
   for (const e of events) {
-    const label = monthOf(e.startsAt, now);
-    if (months.at(-1)?.[0] === label) months.at(-1)![1].push(e);
-    else months.push([label, [e]]);
+    const label = group(e.startsAt);
+    if (groups.at(-1)?.[0] === label) groups.at(-1)![1].push(e);
+    else groups.push([label, [e]]);
   }
 
   const lone = (e: ClubEvent) => {
@@ -196,15 +208,17 @@ export function Gallery({
       <div ref={captionRuler} className="caps">
         {events.map((e) => (
           <div key={e.id} className="cap">
-            <span className="meta">{SHORT.format(e.startsAt)}</span>
-            <span className="acts">
-              {e.link ? <span className="ra" /> : null}
-              <span className="ra" />
-            </span>
+            <span className="meta">{shortOf(e.startsAt, now)}</span>
+            {isPast(e, now) ? null : (
+              <span className="acts">
+                {e.link ? <span className="ra" /> : null}
+                <span className="ra" />
+              </span>
+            )}
           </div>
         ))}
       </div>
-      {months.map(([label, list]) => (
+      {groups.map(([label, list]) => (
         <section key={label} className="mon">
           <div className="mh">
             <h2 className="mo">{label}</h2>
@@ -212,7 +226,7 @@ export function Gallery({
               {list.length} {list.length === 1 ? "event" : "events"}
             </span>
           </div>
-          {events.length === 1 ? (
+          {fill && events.length === 1 ? (
             lone(list[0]!)
           ) : (
             <div className={phone ? "strip" : "wall"}>{list.map(tile)}</div>

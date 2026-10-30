@@ -1,15 +1,26 @@
-import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
+import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { DESK, PHONE, useMedia } from "@/lib/media";
 
 import { Bar, Pages } from "../frame";
-import { EVENTS } from "./data";
-import { Actions, away, Details, type Fit, fitStack, Nothing, Picture, stackShape } from "./detail";
+import { type ClubEvent, isPast } from "./data";
+import {
+  Actions,
+  away,
+  Details,
+  type Fit,
+  fitStack,
+  monthOf,
+  Nothing,
+  Picture,
+  semesterOf,
+  stackShape,
+} from "./detail";
 import { Gallery, remeasure, Skeletons } from "./gallery";
 import { tileOf, View } from "./view";
 
-const NONE = { art: "event", tone: "navy-medium" } as const;
+const NONE = {};
 
 function useViewport() {
   const [size, setSize] = useState(() => ({ w: innerWidth, h: innerHeight }));
@@ -34,22 +45,22 @@ function focusTile(id: string) {
   pick?.focus({ preventScroll: true });
 }
 
-export function EventsPage({ picked }: { picked?: string }) {
+export function EventsPage({ events, picked }: { events: ClubEvent[]; picked?: string }) {
   const navigate = useNavigate();
   const router = useRouter();
-  const scrollRestored = useRouterState({ select: (s) => s.status === "idle" });
   const desk = useMedia(DESK);
   const phone = useMedia(PHONE);
   const viewport = useViewport();
-  const [now] = useState(Date.now);
-  const upcoming = useMemo(
-    () => EVENTS.filter((e) => e.endsAt > now).sort((a, b) => a.startsAt - b.startsAt),
-    [now],
-  );
+  const [now, setNow] = useState(Date.now);
+  const upcoming = useMemo(() => events.filter((e) => !isPast(e, now)), [events, now]);
+  const past = useMemo(() => events.filter((e) => isPast(e, now)).reverse(), [events, now]);
+  const sizedBy = upcoming.length ? upcoming : events;
+  const shapes = useMemo(() => sizedBy.map(stackShape), [sizedBy]);
   const next = upcoming[0];
-  const chosen = upcoming.find((e) => e.id === picked);
+  const chosen = events.find((e) => e.id === picked);
   const selected = desk ? (chosen ?? next) : undefined;
   const opened = desk ? undefined : chosen;
+  const selectedPast = !!selected && isPast(selected, now);
 
   const main = useRef<HTMLElement>(null);
   const side = useRef<HTMLElement>(null);
@@ -68,6 +79,14 @@ export function EventsPage({ picked }: { picked?: string }) {
   if (opened && opened.id !== onScreen) setOnScreen(opened.id);
   else if (!opened && desk && onScreen) setOnScreen(undefined);
 
+  useEffect(() => {
+    const wake = () => {
+      if (!document.hidden) setNow(Date.now());
+    };
+    document.addEventListener("visibilitychange", wake);
+    return () => document.removeEventListener("visibilitychange", wake);
+  }, []);
+
   useLayoutEffect(() => {
     const el = side.current;
     const stk = stack.current;
@@ -75,11 +94,10 @@ export function EventsPage({ picked }: { picked?: string }) {
     if (!desk || !el || !stk || !pr) return setFit(null);
     return remeasure(pr, () => {
       const room = el.clientHeight - parseFloat(getComputedStyle(el).paddingBottom) - stk.offsetTop;
-      const shapes = upcoming.length ? upcoming.map(stackShape) : [1.6];
-      const next = fitStack(pr, shapes, column(viewport.w), room);
+      const next = fitStack(pr, shapes.length ? shapes : [1.6], column(viewport.w), room);
       setFit((f) => (f?.width === next.width && f.t === next.t ? f : next));
     });
-  }, [desk, viewport, upcoming]);
+  }, [desk, viewport, shapes]);
 
   useLayoutEffect(() => {
     const el = gallery.current;
@@ -110,11 +128,11 @@ export function EventsPage({ picked }: { picked?: string }) {
     }
     box.style.height = `${h}px`;
     if (!desk) page.style.paddingBottom = "0px";
-  }, [desk, phone, viewport, width, fit, upcoming.length]);
+  }, [desk, phone, viewport, width, fit, upcoming.length, past.length]);
 
   useLayoutEffect(() => {
     if (side.current) side.current.scrollTop = 0;
-  }, [fit, selected]);
+  }, [fit, selected?.id]);
 
   useEffect(() => {
     if (!focusTitle.current) return;
@@ -154,6 +172,23 @@ export function EventsPage({ picked }: { picked?: string }) {
 
   const gap = phone ? 16 : 24;
   const grid = { width, gap, row: phone ? PHONE_ROW : ROW, phone };
+  const viewing = past.some((e) => e.id === onScreen) ? past : upcoming;
+
+  const pastEvents = (w = width) =>
+    past.length ? (
+      <section className="past-events" aria-label="Past events">
+        <h2 className="past-title">Past events</h2>
+        <Gallery
+          {...grid}
+          width={w}
+          events={past}
+          now={now}
+          selected={selected}
+          group={semesterOf}
+          onPick={pick}
+        />
+      </section>
+    ) : null;
 
   function content() {
     if (upcoming.length) {
@@ -165,21 +200,24 @@ export function EventsPage({ picked }: { picked?: string }) {
             now={now}
             next={next}
             selected={selected}
+            group={(t) => monthOf(t, now)}
+            fill={!past.length}
             onPick={pick}
           />
-          {upcoming.length === 1 ? <Skeletons box={skeletons} {...grid} /> : null}
+          {upcoming.length === 1 && !past.length ? <Skeletons box={skeletons} {...grid} /> : null}
+          {pastEvents()}
         </>
       );
     }
-    if (desk) return <Skeletons box={skeletons} {...grid} />;
+    if (desk) return pastEvents() ?? <Skeletons box={skeletons} {...grid} />;
     if (phone)
       return (
         <>
           <div className="empty stk">
-            <Picture event={NONE} width={width} height={width / 1.6} />
+            {past.length ? null : <Picture event={NONE} width={width} height={width / 1.6} />}
             <Nothing />
           </div>
-          <Skeletons box={skeletons} {...grid} />
+          {pastEvents() ?? <Skeletons box={skeletons} {...grid} />}
         </>
       );
     const w = column(viewport.w);
@@ -194,7 +232,7 @@ export function EventsPage({ picked }: { picked?: string }) {
           <Picture event={NONE} width={w} height={Math.min(w / 1.6, 0.3 * viewport.h)} />
           <Nothing />
         </div>
-        <Skeletons box={skeletons} {...grid} width={rest} />
+        {pastEvents(rest) ?? <Skeletons box={skeletons} {...grid} width={rest} />}
       </div>
     );
   }
@@ -213,9 +251,13 @@ export function EventsPage({ picked }: { picked?: string }) {
           >
             <p className="mh">
               <b className="mo">
-                {selected && selected !== next ? away(selected, now) : "Next up"}
+                {selectedPast
+                  ? "Past event"
+                  : selected && selected !== next
+                    ? away(selected, now)
+                    : "Next up"}
               </b>
-              {selected === next && selected ? (
+              {selected && (selected === next || selectedPast) ? (
                 <span className="n">{away(selected, now)}</span>
               ) : null}
             </p>
@@ -223,12 +265,12 @@ export function EventsPage({ picked }: { picked?: string }) {
               {!fit ? null : selected ? (
                 <>
                   <Picture
+                    key={`flier-${selected.id}`}
                     event={selected}
                     width={fit.width}
                     height={fit.width / stackShape(selected)}
-                    lazy
                   >
-                    <Actions event={selected} mode="corner" />
+                    <Actions event={selected} mode="corner" now={now} />
                   </Picture>
                   <Details
                     key={selected.id}
@@ -247,14 +289,14 @@ export function EventsPage({ picked }: { picked?: string }) {
             </div>
           </aside>
         ) : null}
-        <section ref={gallery} className="gal" aria-label="Upcoming events">
+        <section ref={gallery} className="gal" aria-label="Events">
           {width ? content() : null}
         </section>
       </main>
       <Pages dock />
       <div ref={probe} className="probe" aria-hidden inert>
-        {upcoming.length ? (
-          upcoming.map((e) => (
+        {sizedBy.length ? (
+          sizedBy.map((e) => (
             <div key={e.id} className="stk">
               <Details event={e} now={now} next={e === next} eyebrow={!desk} />
             </div>
@@ -267,16 +309,17 @@ export function EventsPage({ picked }: { picked?: string }) {
       </div>
       {onScreen && !desk ? (
         <View
-          events={upcoming}
+          events={viewing}
+          shapes={shapes}
           start={Math.max(
             0,
-            upcoming.findIndex((e) => e.id === onScreen),
+            viewing.findIndex((e) => e.id === onScreen),
           )}
           now={now}
           next={next}
           probe={probe}
           grow={grow}
-          stayOpen={!!opened || !scrollRestored}
+          stayOpen={!!opened}
           onPage={(id) =>
             void navigate({ to: ".", search: { event: id }, replace: true, resetScroll: false })
           }

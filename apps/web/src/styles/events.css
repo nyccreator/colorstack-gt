@@ -18,35 +18,19 @@
   }
 }
 
-/* Each tone is named here, since Tailwind only keeps the colour tokens something refers to. */
-.events [data-tone="navy"] {
-  --bg: var(--color-navy);
-}
-
-.events [data-tone="navy-medium"] {
-  --bg: var(--color-navy-medium);
-}
-
-.events [data-tone="campanile"] {
-  --bg: var(--color-campanile);
-}
-
-.events [data-tone="tech-lawn"] {
-  --bg: var(--color-tech-lawn);
-}
-
-.events [data-tone="whistle"] {
-  --bg: var(--color-whistle);
-}
-
 .events .pic {
   position: relative;
+  isolation: isolate;
   display: block;
   flex: none;
   overflow: hidden;
   border-radius: 16px;
-  background: var(--bg);
+  background: color-mix(in srgb, var(--color-diploma) 6%, transparent);
   box-shadow: var(--shade);
+}
+
+.events .pic.tone {
+  background: var(--color-navy-medium);
 }
 
 .events .pic > img {
@@ -65,6 +49,41 @@
   translate: -50% -50%;
   rotate: -6deg;
   filter: drop-shadow(0 8px 18px color-mix(in srgb, var(--color-navy) 40%, transparent));
+}
+
+.events .wash {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s var(--ease-out-quint);
+}
+
+/* A browser without this blend would show a solid blue tile, so such a browser keeps the flier as it is. */
+@supports (mix-blend-mode: color) {
+  .events .wash {
+    background: var(--color-blue-bright);
+    mix-blend-mode: color;
+  }
+
+  .events .t.past .wash {
+    opacity: 1;
+  }
+
+  .events .t.past .pic > img {
+    opacity: 0.5;
+    transition: opacity 0.18s var(--ease-out-quint);
+  }
+}
+
+.events .t.past.on .wash,
+.events .t.past .pick:focus-visible .wash {
+  opacity: 0;
+}
+
+.events .t.past.on .pic > img,
+.events .t.past .pick:focus-visible .pic > img {
+  opacity: 1;
 }
 
 .events .cor {
@@ -121,6 +140,7 @@
 .events .det {
   container-type: inline-size;
   font-size: calc(16px * var(--t, 1));
+  overflow-wrap: anywhere;
 }
 
 .events .stk .det {
@@ -152,11 +172,39 @@
 }
 
 .events .ds {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
   margin: 0.667em 0 0;
+  overflow: hidden;
   font-size: max(14px, 0.9375em);
   line-height: 1.53;
   color: var(--muted);
+  white-space: pre-line;
   text-wrap: pretty;
+}
+
+.events .ds.open {
+  display: block;
+}
+
+.events .more {
+  position: relative;
+  margin-top: 0.4em;
+  font-size: max(14px, 0.9375em);
+  line-height: 1.3;
+  cursor: pointer;
+  transition: color 0.18s;
+}
+
+.events .more::after {
+  content: "";
+  position: absolute;
+  inset: -12px -8px;
+}
+
+.events .more:focus-visible {
+  outline-offset: 2px;
 }
 
 .events .fx {
@@ -232,6 +280,7 @@
   position: fixed;
   top: 0;
   left: 0;
+  width: min(100% - 2 * var(--spacing-edge), 460px, 75dvh);
   visibility: hidden;
   pointer-events: none;
 }
@@ -283,6 +332,25 @@
   font-weight: 500;
   line-height: 22px;
   color: var(--muted);
+}
+
+.events .past-events {
+  margin-top: 56px;
+}
+
+.events .gal > .past-events:first-child,
+.events .empty + .past-events,
+.events .zcol .past-events {
+  margin-top: 0;
+}
+
+.events .past-title {
+  margin: 0 0 20px;
+  font-family: var(--font-display);
+  font-size: 1.625rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
 }
 
 .events .wall {
@@ -354,6 +422,10 @@
 .events .cap .meta em {
   font-style: normal;
   color: var(--color-burdell);
+}
+
+.events .t.past .cap .ct {
+  min-height: 0;
 }
 
 .events .cap .ct {
@@ -807,7 +879,7 @@ html:has(.events .view[open]) {
   height: calc(var(--cl) - 2 * (var(--ring) + var(--ring-gap)));
   overflow: hidden;
   border-radius: 7px;
-  background: var(--bg);
+  background: var(--color-navy-medium);
   opacity: 0.5;
   outline: var(--ring) solid transparent;
   outline-offset: var(--ring-gap);
@@ -849,6 +921,16 @@ html:has(.events .view[open]) {
 .events .reel button:focus-visible .th {
   outline-color: var(--color-burdell);
   transition: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .events .t.past .pick:hover .wash {
+    opacity: 0;
+  }
+
+  .events .t.past .pick:hover .pic > img {
+    opacity: 1;
+  }
 }
 
 @media (hover: hover) {

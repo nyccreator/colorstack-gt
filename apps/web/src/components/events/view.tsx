@@ -1,3 +1,4 @@
+import { useRouterState } from "@tanstack/react-router";
 import {
   type RefObject,
   useEffect,
@@ -10,8 +11,9 @@ import {
 
 import { APPEAR, MOVE, playAfterFirstFrame, still } from "@/lib/motion";
 
-import type { ClubEvent } from "./data";
-import { Actions, Details, type Fit, fitStack, Picture, stackShape } from "./detail";
+import { type ClubEvent, isPast } from "./data";
+import { Actions, Details, type Fit, fitStack, Picture, stackShape, STICKER } from "./detail";
+import { remeasure } from "./gallery";
 
 function flight(r0: DOMRect, r: DOMRect, round: number): Keyframe {
   const x = r.left - r0.left;
@@ -52,6 +54,22 @@ function hideDetails(inner: HTMLElement) {
     for (const el of parts) el.style.removeProperty("visibility");
   };
 }
+function fadeWash(pic: Element, tile: Element, into: boolean, options: KeyframeAnimationOptions) {
+  if (!pic.querySelector(".wash")) return [];
+  return [".wash", "img"].flatMap((part) => {
+    const el = pic.querySelector(part);
+    const worn = tile.querySelector(part);
+    if (!el || !worn) return [];
+    const onTile = getComputedStyle(worn).opacity;
+    const atRest = part === "img" ? "1" : "0";
+    const current = getComputedStyle(el).opacity;
+    el.getAnimations().forEach((a) => a.cancel());
+    const frames = into
+      ? [{ opacity: current }, { opacity: onTile }]
+      : [{ opacity: onTile }, { opacity: atRest }];
+    return [el.animate(frames, options)];
+  });
+}
 function takeOver(el: HTMLElement) {
   const y = new DOMMatrix(getComputedStyle(el).transform).m42;
   el.getAnimations().forEach((a) => a.cancel());
@@ -59,7 +77,8 @@ function takeOver(el: HTMLElement) {
 }
 
 export function View({
-  events,
+  events: list,
+  shapes,
   start,
   now,
   next,
@@ -71,6 +90,7 @@ export function View({
   onGone,
 }: {
   events: ClubEvent[];
+  shapes: number[];
   start: number;
   now: number;
   next?: ClubEvent;
@@ -81,6 +101,9 @@ export function View({
   onClose: () => void;
   onGone: (id: string) => void;
 }) {
+  // Every position in here is an index, so the list holds still for as long as the viewer is open.
+  const [events] = useState(list);
+  const routerIdle = useRouterState({ select: (s) => s.status === "idle" });
   const dialog = useRef<HTMLDialogElement>(null);
   const track = useRef<HTMLDivElement>(null);
   const ruler = useRef<HTMLDivElement>(null);
@@ -88,6 +111,7 @@ export function View({
   const [fit, setFit] = useState<Fit | null>(null);
   const [initial] = useState(start);
   const [at, setAt] = useState(start);
+  const [resting, setResting] = useState(start);
   const here = useRef(start);
   const leaving = useRef(false);
   const focusWasOnOldPage = useRef(false);
@@ -107,12 +131,16 @@ export function View({
       const page = track.current!.firstElementChild as HTMLElement;
       const cs = getComputedStyle(page);
       const room = page.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-      setFit(fitStack(probe.current!, events.map(stackShape), ruler.current!.clientWidth, room));
+      const next = fitStack(probe.current!, shapes, ruler.current!.clientWidth, room);
+      setFit((f) => (f?.width === next.width && f.t === next.t ? f : next));
     };
-    measure();
+    const stop = remeasure(probe.current!, measure);
     addEventListener("resize", measure);
-    return () => removeEventListener("resize", measure);
-  }, [events, probe]);
+    return () => {
+      stop();
+      removeEventListener("resize", measure);
+    };
+  }, [shapes, probe]);
 
   const edges = () => {
     const r = reel.current;
@@ -137,6 +165,12 @@ export function View({
     t.scrollLeft = here.current * t.clientWidth;
   }, [fit]);
 
+  useLayoutEffect(() => {
+    Array.from(track.current!.children).forEach((page, k) => {
+      if (k !== resting) page.scrollTop = 0;
+    });
+  }, [resting]);
+
   const open = useEffectEvent(() => {
     centre(initial, false);
     if (!grow.current) return;
@@ -152,22 +186,25 @@ export function View({
       d.animate([{ opacity: 0 }, { opacity: 1 }], { ...backdrop, pseudoElement: "::after" }),
       ...(
         [
-          [page.querySelector(".det")!, 120],
-          [page.querySelector(".cor")!, 160],
-          [d.querySelector(".ctl")!, 200],
+          [page.querySelector(".det"), 120],
+          [page.querySelector(".cor"), 160],
+          [d.querySelector(".ctl"), 200],
         ] as const
-      ).map(([el, delay]) =>
-        el.animate(
-          [
-            { opacity: 0, transform: "translateY(12px)" },
-            { opacity: 1, transform: "none" },
-          ],
-          { duration: 300, delay, easing: MOVE, fill: "backwards" },
-        ),
+      ).flatMap(([el, delay]) =>
+        el
+          ? el.animate(
+              [
+                { opacity: 0, transform: "translateY(12px)" },
+                { opacity: 1, transform: "none" },
+              ],
+              { duration: 300, delay, easing: MOVE, fill: "backwards" },
+            )
+          : [],
       ),
     ];
     let uncover = () => {};
     if (from) {
+      all.push(...fadeWash(p, from, false, { duration: 420, easing: MOVE }));
       const rest = { transform: "none", borderRadius: `${radius(p)}px` };
       const flying = p.animate(
         clipBothEnds(
@@ -214,6 +251,7 @@ export function View({
   function onScroll() {
     const t = track.current!;
     const k = Math.round(t.scrollLeft / t.clientWidth);
+    if (Math.abs(t.scrollLeft - k * t.clientWidth) < 1) setResting(k);
     if (k === here.current || leaving.current || !events[k]) return;
     dialog.current?.querySelector<HTMLElement>(":popover-open")?.hidePopover();
     const focus = document.activeElement;
@@ -274,7 +312,10 @@ export function View({
       easing: APPEAR,
       fill: "forwards",
     });
-    if (slot) uncover = coverTile(slot);
+    if (slot) {
+      uncover = coverTile(slot);
+      fadeWash(p, slot, true, { duration: 340, easing: MOVE, fill: "forwards" });
+    }
     const flying = slot
       ? p.animate(
           clipBothEnds(
@@ -290,9 +331,10 @@ export function View({
         });
     void flying.finished.then(done, done);
   });
+  const leave = !stayOpen && routerIdle;
   useEffect(() => {
-    if (!stayOpen) flyBack();
-  }, [stayOpen]);
+    if (leave) flyBack();
+  }, [leave]);
 
   const pulled = useEffectEvent(close);
   useEffect(() => {
@@ -376,7 +418,7 @@ export function View({
     <dialog
       ref={dialog}
       className="view"
-      aria-label="Upcoming events"
+      aria-label={events[0] && isPast(events[0], now) ? "Past events" : "Upcoming events"}
       tabIndex={-1}
       style={fit ? { "--w": `${fit.width}px`, "--t": fit.t } : undefined}
       onCancel={(e) => {
@@ -408,10 +450,22 @@ export function View({
             <div className="pg-in stk">
               {fit ? (
                 <>
-                  <Picture event={e} width={fit.width} height={fit.width / stackShape(e)}>
-                    <Actions event={e} mode="corner" />
+                  <Picture
+                    event={e}
+                    width={fit.width}
+                    height={fit.width / stackShape(e)}
+                    lazy={Math.abs(k - at) > 1}
+                    past={isPast(e, now)}
+                  >
+                    <Actions event={e} mode="corner" now={now} />
                   </Picture>
-                  <Details event={e} now={now} next={e === next} eyebrow />
+                  <Details
+                    event={e}
+                    now={now}
+                    next={e === next}
+                    eyebrow
+                    offScreen={k !== resting}
+                  />
                 </>
               ) : null}
             </div>
@@ -437,14 +491,13 @@ export function View({
                   type="button"
                   aria-current={k === at || undefined}
                   aria-label={e.title}
-                  data-tone={e.flier ? undefined : e.tone}
                   onClick={() => go(k)}
                 >
                   <span className="th">
                     {e.flier ? (
                       <img src={e.flier.src} loading="lazy" alt="" />
                     ) : (
-                      <img className="st" src={`/assets/art/stickers/${e.art}.svg`} alt="" />
+                      <img className="st" src={STICKER} alt="" />
                     )}
                   </span>
                 </button>

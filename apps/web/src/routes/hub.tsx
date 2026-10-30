@@ -1,10 +1,12 @@
+import { api } from "@colorstack-gt/backend/convex/_generated/api";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useQuery } from "convex/react";
 import { type MouseEvent, type ReactNode, useEffect, useLayoutEffect, useRef } from "react";
 
 import { z } from "zod";
 
 import { EventsPage } from "@/components/events/page";
-import { Bar, Waiting } from "@/components/frame";
+import { Bar, Pages, Waiting } from "@/components/frame";
 import { containerTitle, FirstName, inlineLink, pin } from "@/components/onboarding/controls";
 import { TASKS } from "@/components/onboarding/options";
 import { MemberCard } from "@/components/you/card";
@@ -36,7 +38,23 @@ function Hub() {
 
   if (!member.me.onRoster) return <Engage me={member.me} />;
 
-  return <EventsPage picked={event} />;
+  return <Events picked={event} />;
+}
+
+function Events({ picked }: { picked?: string }) {
+  const events = useQuery(api.events.list);
+
+  if (!events) {
+    return (
+      <div className="you">
+        <Bar signOut nav={<Pages />} className="bar" />
+        <Waiting />
+        <Pages dock />
+      </div>
+    );
+  }
+
+  return <EventsPage events={events} picked={picked} />;
 }
 
 function Step({

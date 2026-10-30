@@ -1,4 +1,6 @@
+import { api } from "@colorstack-gt/backend/convex/_generated/api";
 import { createFileRoute } from "@tanstack/react-router";
+import { useQueries } from "convex/react";
 
 import { Bar, Pages, Waiting } from "@/components/frame";
 import { YouPage } from "@/components/you/page";
@@ -11,8 +13,13 @@ export const Route = createFileRoute("/you")({
   component: You,
 });
 
+const EVENTS = { events: { query: api.events.list, args: {} } };
+
 function You() {
   const member = useMember("roster");
+  // Holding this subscription lets Events open with its list so Back can restore its scroll, and useQueries
+  // reports a failed query where useQuery would throw it.
+  useQueries(EVENTS);
 
   if (member.status !== "ready") {
     return (
