@@ -1,4 +1,5 @@
 import {
+  memo,
   type ReactNode,
   type RefObject,
   useEffect,
@@ -8,17 +9,20 @@ import {
   useState,
 } from "react";
 
-import { appear, cue } from "@/lib/motion";
+import { appear, cue, MOVE, still } from "@/lib/motion";
 
 import { announce } from "../frame";
 import { TaskLink } from "../member/task-link";
-import type { ClubEvent } from "./data";
+import { inlineLink } from "../onboarding/controls";
+import { type ClubEvent, isPast } from "./data";
 
 const ATLANTA = "America/New_York";
 const format = (options: Intl.DateTimeFormatOptions) =>
   new Intl.DateTimeFormat("en-US", { timeZone: ATLANTA, ...options });
 const LONG = format({ weekday: "long", month: "long", day: "numeric" });
-export const SHORT = format({ weekday: "short", month: "short", day: "numeric" });
+const LONG_YEAR = format({ weekday: "long", month: "long", day: "numeric", year: "numeric" });
+const SHORT = format({ weekday: "short", month: "short", day: "numeric" });
+const SHORT_YEAR = format({ month: "short", day: "numeric", year: "numeric" });
 const MON = format({ month: "short" });
 const DATE = format({ day: "numeric" });
 const WEEKDAY = format({ weekday: "long" });
@@ -33,15 +37,38 @@ const clock = (t: number) => `${part(CLOCK, t, "hour")}:${part(CLOCK, t, "minute
 const half = (t: number) => part(CLOCK, t, "dayPeriod").toLowerCase();
 const time = (t: number) => `${clock(t)} ${half(t)}`;
 const span = (e: ClubEvent) =>
-  half(e.startsAt) === half(e.endsAt)
-    ? `${clock(e.startsAt)} to ${time(e.endsAt)}`
-    : `${time(e.startsAt)} to ${time(e.endsAt)}`;
+  dayNo(e.startsAt) !== dayNo(e.endsAt)
+    ? `${time(e.startsAt)} to ${SHORT.format(e.endsAt)}, ${time(e.endsAt)}`
+    : half(e.startsAt) === half(e.endsAt)
+      ? `${clock(e.startsAt)} to ${time(e.endsAt)}`
+      : `${time(e.startsAt)} to ${time(e.endsAt)}`;
 const dayNo = (t: number) =>
   Date.UTC(+part(DAY, t, "year"), +part(DAY, t, "month") - 1, +part(DAY, t, "day")) / 86_400_000;
+const sameYear = (t: number, now: number) => YEAR.format(t) === YEAR.format(now);
 export const monthOf = (t: number, now: number) =>
-  YEAR.format(t) === YEAR.format(now) ? MONTH.format(t) : `${MONTH.format(t)} ${YEAR.format(t)}`;
+  sameYear(t, now) ? MONTH.format(t) : `${MONTH.format(t)} ${YEAR.format(t)}`;
+export const shortOf = (t: number, now: number) =>
+  sameYear(t, now) ? SHORT.format(t) : SHORT_YEAR.format(t);
+const longOf = (t: number, now: number) => (sameYear(t, now) ? LONG : LONG_YEAR).format(t);
+
+export function semesterOf(t: number) {
+  const month = +part(DAY, t, "month");
+  return `${month <= 4 ? "Spring" : month <= 7 ? "Summer" : "Fall"} ${YEAR.format(t)}`;
+}
+
+function ago(e: ClubEvent, now: number) {
+  const days = dayNo(now) - dayNo(e.startsAt);
+  if (days <= 0) return "Earlier today";
+  if (days === 1) return "Yesterday";
+  if (days < 14) return `${days} days ago`;
+  if (days < 61) return `${Math.round(days / 7)} weeks ago`;
+  if (days < 365) return `${Math.round(days / 30.44)} months ago`;
+  const years = Math.round(days / 365);
+  return years === 1 ? "A year ago" : `${years} years ago`;
+}
 
 export function away(e: ClubEvent, now: number) {
+  if (isPast(e, now)) return ago(e, now);
   const days = dayNo(e.startsAt) - dayNo(now);
   if (days <= 0) return "Today";
   if (days === 1) return "Tomorrow";
@@ -49,6 +76,8 @@ export function away(e: ClubEvent, now: number) {
   if (days < 14) return `In ${days} days`;
   return `In ${Math.round(days / 7)} weeks`;
 }
+
+export const STICKER = "/assets/art/stickers/event.svg";
 
 const stamp = (t: number) => new Date(t).toISOString().replace(/[-:]|\.\d{3}/g, "");
 const google = (e: ClubEvent) =>
@@ -94,49 +123,65 @@ function download(e: ClubEvent) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
-type Look = Pick<ClubEvent, "art" | "tone" | "flier">;
+type Look = Pick<ClubEvent, "flier">;
 
-const ratio = (e: Look, blank: number) => (e.flier ? e.flier.width / e.flier.height : blank);
-export const tileShape = (e: Look) => ratio(e, 4 / 5);
-export const stackShape = (e: Look) => ratio(e, 1);
+const TALLEST = 9 / 16;
+const WIDEST = 3;
+const shapeOr = (blank: number, e: Look) => {
+  const shape = e.flier ? e.flier.width / e.flier.height : blank;
+  return shape > 0 && Number.isFinite(shape) ? Math.min(WIDEST, Math.max(TALLEST, shape)) : blank;
+};
+export const tileShape = (e: Look) => shapeOr(4 / 5, e);
+export const stackShape = (e: Look) => shapeOr(1, e);
 
 export function Picture({
   event,
   width,
   height,
   lazy,
+  past,
   children,
 }: {
   event: Look;
   width: number;
   height: number;
   lazy?: boolean;
+  past?: boolean;
   children?: ReactNode;
 }) {
+  const [broken, setBroken] = useState(false);
+  const flier = broken ? undefined : event.flier;
   return (
-    <span
-      className={event.flier ? "pic" : "pic tone"}
-      data-tone={event.flier ? undefined : event.tone}
-      style={{ width, height }}
-    >
-      {event.flier ? (
+    <span className={flier ? "pic" : "pic tone"} style={{ width, height }}>
+      {flier ? (
         <img
-          src={event.flier.src}
-          width={event.flier.width}
-          height={event.flier.height}
+          src={flier.src}
+          width={flier.width}
+          height={flier.height}
           loading={lazy ? "lazy" : "eager"}
           decoding="async"
           alt=""
+          onError={() => setBroken(true)}
         />
       ) : (
-        <img src={`/assets/art/stickers/${event.art}.svg`} alt="" />
+        <img src={STICKER} alt="" />
       )}
+      {past ? <i className="wash" aria-hidden /> : null}
       {children}
     </span>
   );
 }
 
-export function Actions({ event, mode }: { event: ClubEvent; mode: "tile" | "corner" }) {
+export function Actions({
+  event,
+  mode,
+  now,
+}: {
+  event: ClubEvent;
+  mode: "tile" | "corner";
+  now: number;
+}) {
+  if (isPast(event, now)) return null;
   return (
     <div className={mode === "tile" ? "acts" : "cor"}>
       {event.link ? (
@@ -183,28 +228,88 @@ export function fitStack(probe: HTMLElement, shapes: number[], widest: number, r
   }
 }
 
-export function Details({
+function About({ text, offScreen }: { text: string; offScreen?: boolean }) {
+  const body = useRef<HTMLParagraphElement>(null);
+  const heightBefore = useRef<number | null>(null);
+  const [long, setLong] = useState(false);
+  const [open, setOpen] = useState(false);
+  if (offScreen && open) setOpen(false);
+
+  useLayoutEffect(() => {
+    if (open) return;
+    const el = body.current!;
+    const measure = () => {
+      if (!el.getAnimations().length) setLong(el.scrollHeight > el.clientHeight + 1);
+    };
+    measure();
+    const watch = new ResizeObserver(measure);
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [open, text]);
+
+  useLayoutEffect(() => {
+    const el = body.current!;
+    const from = heightBefore.current;
+    heightBefore.current = null;
+    if (from === null || still()) return;
+    el.animate([{ height: `${from}px` }, { height: `${el.offsetHeight}px` }], {
+      duration: 200,
+      easing: MOVE,
+    });
+  }, [open]);
+
+  return (
+    <>
+      <p ref={body} className={open ? "ds open" : "ds"}>
+        {text}
+      </p>
+      {long ? (
+        <button
+          type="button"
+          className={`more ${inlineLink}`}
+          aria-expanded={open}
+          onClick={() => {
+            heightBefore.current = body.current!.offsetHeight;
+            setOpen(!open);
+          }}
+        >
+          {open ? "Read less" : "Read more"}
+        </button>
+      ) : null}
+    </>
+  );
+}
+
+export const Details = memo(function Details({
   event,
   now,
   next,
   eyebrow,
   title,
+  offScreen,
 }: {
   event: ClubEvent;
   now: number;
   next: boolean;
   eyebrow?: boolean;
   title?: RefObject<HTMLHeadingElement | null>;
+  offScreen?: boolean;
 }) {
   return (
     <div className="det">
       {eyebrow ? (
-        <span className="eyb">{next ? `Next up · ${away(event, now)}` : away(event, now)}</span>
+        <span className="eyb">
+          {isPast(event, now)
+            ? `Past event · ${away(event, now)}`
+            : next
+              ? `Next up · ${away(event, now)}`
+              : away(event, now)}
+        </span>
       ) : null}
       <h2 ref={title} tabIndex={-1} className="ttl">
         {event.title}
       </h2>
-      <p className="ds">{event.about}</p>
+      <About text={event.about} offScreen={offScreen} />
       <div className="fx">
         <p>
           <span className="tl">
@@ -212,22 +317,24 @@ export function Details({
             <span className="dd">{DATE.format(event.startsAt)}</span>
           </span>
           <span className="fk">
-            <b>{LONG.format(event.startsAt)}</b>
+            <b>{longOf(event.startsAt, now)}</b>
             <span>{span(event)}</span>
           </span>
         </p>
-        <p>
-          <span className="tl">
-            <i className="ic pin" aria-hidden />
-          </span>
-          <span className="fk">
-            <b>{event.place}</b>
-          </span>
-        </p>
+        {event.place ? (
+          <p>
+            <span className="tl">
+              <i className="ic pin" aria-hidden />
+            </span>
+            <span className="fk">
+              <b>{event.place}</b>
+            </span>
+          </p>
+        ) : null}
       </div>
     </div>
   );
-}
+});
 
 export function Nothing() {
   return (

@@ -1,26 +1,6 @@
-type Art =
-  | "company"
-  | "event"
-  | "hangout"
-  | "mentor"
-  | "mixer"
-  | "panel"
-  | "resume"
-  | "study"
-  | "workshop";
-type Tone = "navy" | "navy-medium" | "campanile" | "tech-lawn" | "whistle";
+import type { api } from "@colorstack-gt/backend/convex/_generated/api";
+import type { FunctionReturnType } from "convex/server";
 
-export type ClubEvent = {
-  id: string;
-  title: string;
-  startsAt: number;
-  endsAt: number;
-  place: string;
-  about: string;
-  art: Art;
-  tone: Tone;
-  flier?: { src: string; width: number; height: number };
-  link?: { label: "RSVP" | "Register"; href: string };
-};
+export type ClubEvent = FunctionReturnType<typeof api.events.list>[number];
 
-export const EVENTS: readonly ClubEvent[] = [];
+export const isPast = (e: Pick<ClubEvent, "endsAt">, now: number) => e.endsAt <= now;

@@ -11,6 +11,7 @@
 import type * as auth from "../auth.js";
 import type * as email from "../email.js";
 import type * as env from "../env.js";
+import type * as events from "../events.js";
 import type * as http from "../http.js";
 import type * as lib_config from "../lib/config.js";
 import type * as lib_demographics from "../lib/demographics.js";
@@ -29,6 +30,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   email: typeof email;
   env: typeof env;
+  events: typeof events;
   http: typeof http;
   "lib/config": typeof lib_config;
   "lib/demographics": typeof lib_demographics;

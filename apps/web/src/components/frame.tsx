@@ -6,9 +6,34 @@ import { signOut } from "@/lib/session";
 
 import Loader from "./loader";
 import { Mark } from "./mark";
+import { inlineLink } from "./onboarding/controls";
 
 export function Waiting({ under = true }: { under?: boolean }) {
   return <div className={under ? "pt-page" : ""}>{useSlow(true) ? <Loader /> : null}</div>;
+}
+
+export function PageError() {
+  return (
+    <div className="min-h-dvh bg-blue-bright px-edge">
+      <Bar signOut />
+      <main className="mx-auto w-full max-w-gate pt-page">
+        <h1 className="type-display text-title text-balance">Something went wrong</h1>
+        <p className="mt-3 text-subtitle text-pretty text-diploma/70">
+          Reload the page. If it keeps happening, email{" "}
+          <a
+            href="mailto:colorstackgt@gmail.com"
+            className={`${inlineLink} focus-visible:outline-offset-2`}
+          >
+            the e-board
+          </a>
+          .
+        </p>
+        <button type="button" className="btn-solid mt-6" onClick={() => location.reload()}>
+          Reload
+        </button>
+      </main>
+    </div>
+  );
 }
 
 export const mayLeave = (unsaved?: () => boolean) =>
