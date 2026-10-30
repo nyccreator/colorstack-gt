@@ -123,6 +123,25 @@ export const memberGroups = {
   interests: v.optional(v.object(interestFields)),
 };
 
+const eventFields = {
+  title: v.string(),
+  startsAt: v.number(),
+  endsAt: v.number(),
+  place: v.string(),
+  about: v.string(),
+  link: v.optional(
+    v.object({ label: v.union(v.literal("RSVP"), v.literal("Register")), href: v.string() }),
+  ),
+};
+
+const flierSize = { width: v.number(), height: v.number() };
+
+export const clubEvent = v.object({
+  ...eventFields,
+  id: v.id("events"),
+  flier: v.optional(v.object({ src: v.string(), ...flierSize })),
+});
+
 export const optionalGroup = v.union(...OPTIONAL.map((group) => v.literal(group)));
 
 export const groupFlags = v.object({
@@ -144,6 +163,11 @@ export default defineSchema({
     ),
     tasksDone: v.array(task),
   }).index("by_userId", ["userId"]),
+
+  events: defineTable({
+    ...eventFields,
+    flier: v.optional(v.object({ storageId: v.id("_storage"), ...flierSize })),
+  }).index("by_startsAt", ["startsAt"]),
 
   demographics: defineTable({
     ...demographicAnswers,
