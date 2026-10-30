@@ -2,6 +2,7 @@ import { env } from "@colorstack-gt/env/web";
 import { createRouter as createTanStackRouter } from "@tanstack/react-router";
 import { ConvexReactClient } from "convex/react";
 
+import { PageError } from "./components/frame";
 import Loader from "./components/loader";
 import { routeTree } from "./routeTree.gen";
 
@@ -16,6 +17,7 @@ export function getRouter() {
     scrollRestoration: ({ location }) =>
       !PAGES_THAT_SET_THEIR_OWN_SCROLL.includes(location.pathname),
     defaultPendingComponent: () => <Loader />,
+    defaultErrorComponent: PageError,
     defaultNotFoundComponent: () => <div>Not Found</div>,
     context: { convex },
   });
